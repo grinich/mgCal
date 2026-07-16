@@ -1,5 +1,5 @@
 import type { EventRow } from '../../data/types'
-import { calendarById, openEdit, selectedKey } from '../state/signals'
+import { calendarById, openEdit, selectedAnchor, selectedKey } from '../state/signals'
 import { fmtTime } from '../time'
 import { drag, startEventDrag, wasDragged, type GridGeom } from './drag'
 
@@ -15,10 +15,21 @@ export function isDeclined(e: EventRow): boolean {
   return e.attendees?.some((a) => a.self && a.responseStatus === 'declined') ?? false
 }
 
-export function toggleSelect(e: EventRow): void {
+export function toggleSelect(e: EventRow, el?: HTMLElement): void {
   if (wasDragged()) return
   const k = eventKey(e)
-  selectedKey.value = selectedKey.value === k ? null : k
+  if (selectedKey.value === k) {
+    selectedKey.value = null
+    selectedAnchor.value = null
+  } else {
+    selectedKey.value = k
+    if (el) {
+      const r = el.getBoundingClientRect()
+      selectedAnchor.value = { x: r.x, y: r.y, w: r.width, h: r.height }
+    } else {
+      selectedAnchor.value = null
+    }
+  }
 }
 
 function canEdit(e: EventRow): boolean {
@@ -68,7 +79,7 @@ export function EventChip({
       onPointerDown={(e) => geom && canEdit(ev) && startEventDrag(e, ev, 'move', geom)}
       onClick={(e) => {
         e.stopPropagation()
-        toggleSelect(ev)
+        toggleSelect(ev, e.currentTarget as HTMLElement)
       }}
       onDblClick={(e) => {
         e.stopPropagation()

@@ -1,12 +1,45 @@
 // Dev-only harness: lets the app page run in a plain browser tab (vite dev on
-// localhost) with a chrome.* shim and seeded demo data. Never ships in the
+// localhost) with a chrome.* shim and seeded data. Real calendar data is used
+// when src/dev/real-events.json exists (gitignored; built by a scratch script
+// from Google Calendar exports), otherwise demo data. Never ships in the
 // extension build — main.tsx only imports this behind import.meta.env.DEV.
-import { db, normalizeEvent } from '../data/db'
+import { db, getSetting, normalizeEvent, setSetting } from '../data/db'
 import type { CalendarRow, GAttendee, GEvent } from '../data/types'
+
+interface RealData {
+  fetchedAt: string
+  calendars: CalendarRow[]
+  events: (GEvent & { calendarId: string })[]
+}
 
 export async function installDevMode(): Promise<void> {
   installChromeShim()
-  await seed()
+  const real = await loadRealData()
+  if (real) await seedReal(real)
+  else await seed()
+}
+
+async function loadRealData(): Promise<RealData | null> {
+  const mods = import.meta.glob<{ default: RealData }>('./real-events.json')
+  const loader = mods['./real-events.json']
+  if (!loader) return null
+  return (await loader()).default
+}
+
+async function seedReal(real: RealData): Promise<void> {
+  const d = await db()
+  const marker = `real:${real.fetchedAt}:${real.events.length}`
+  if ((await getSetting<string>('devSeed')) === marker) return
+  await d.clear('events')
+  await d.clear('calendars')
+  await d.clear('outbox')
+  for (const c of real.calendars) await d.put('calendars', c)
+  for (const e of real.events) {
+    const { calendarId, ...ev } = e
+    await d.put('events', normalizeEvent(ev as GEvent, calendarId, 1))
+  }
+  await setSetting('devSeed', marker)
+  console.log(`[gcal dev] seeded ${real.events.length} REAL events from ${real.calendars.length} calendars`)
 }
 
 function installChromeShim(): void {

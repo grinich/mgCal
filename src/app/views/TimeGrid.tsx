@@ -63,7 +63,7 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
                 }}
                 onClick={(e) => {
                   e.stopPropagation()
-                  toggleSelect(l.ev)
+                  toggleSelect(l.ev, e.currentTarget as HTMLElement)
                 }}
                 onDblClick={(e) => {
                   e.stopPropagation()

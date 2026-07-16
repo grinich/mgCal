@@ -1,7 +1,7 @@
 import type { EventRow } from '../../data/types'
 import { anchor, range, selectedKey, setAnchor, setView, weekStart } from '../state/signals'
 import { DAY, DOW, fmtTimeShort, isSameDay } from '../time'
-import { chipColor, eventKey, isDeclined } from './EventChip'
+import { chipColor, eventKey, isDeclined, toggleSelect } from './EventChip'
 
 const MAX_CHIPS = 4
 
@@ -65,8 +65,7 @@ export function MonthView({ events }: { events: EventRow[] }) {
                 style={{ '--c': chipColor(ev) }}
                 onClick={(e) => {
                   e.stopPropagation()
-                  const k = eventKey(ev)
-                  selectedKey.value = selectedKey.value === k ? null : k
+                  toggleSelect(ev, e.currentTarget as HTMLElement)
                 }}
               >
                 {!ev.allDay && ev.endMs - ev.startMs < DAY && (

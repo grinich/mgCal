@@ -20,6 +20,7 @@ export const authNeeded = signal<boolean>(false)
 export const connected = signal<boolean>(true) // false until first calendar list arrives
 export const sidebarOpen = signal<boolean>(localStorage.getItem('sidebar') === '1')
 export const selectedKey = signal<string | null>(null) // `${calendarId}|${id}`
+export const selectedAnchor = signal<{ x: number; y: number; w: number; h: number } | null>(null)
 export const helpOpen = signal<boolean>(false)
 export const settingsOpen = signal<boolean>(false)
 export const searchOpen = signal<boolean>(false)
