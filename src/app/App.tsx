@@ -8,6 +8,7 @@ import { connectGoogle } from './connect'
 import { isOAuthConfigured } from '../google/auth'
 import { HelpOverlay, SettingsPanel } from './SettingsPanel'
 import { EventEditor } from './event/EventEditor'
+import { EventPopover } from './event/EventPopover'
 import { Toasts } from './Toasts'
 
 export function App() {
@@ -34,6 +35,7 @@ export function App() {
       </div>
       <SettingsPanel />
       <HelpOverlay open={helpOpen.value} onClose={() => (helpOpen.value = false)} />
+      <EventPopover />
       <EventEditor />
       <Toasts />
     </div>

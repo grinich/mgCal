@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { createEvent, deleteEvent, patchEvent } from '../../data/outbox'
-import type { GDateTime, GEvent } from '../../data/types'
+import type { GAttendee, GDateTime, GEvent } from '../../data/types'
 import { calendars, editor, selectedKey, writableCalendars } from '../state/signals'
 import { DAY, startOfDay } from '../time'
+import { getKnownEmails } from './emails'
 
 function ymd(ms: number): string {
   const d = new Date(ms)
@@ -41,9 +42,26 @@ function EditorForm() {
   const [calendarId, setCalendarId] = useState(st.calendarId)
   const [location, setLocation] = useState(st.location)
   const [description, setDescription] = useState(st.description)
+  const [guests, setGuests] = useState<string[]>(
+    (st.original?.attendees ?? []).map((a) => a.email).filter(Boolean),
+  )
+  const [guestInput, setGuestInput] = useState('')
+  const [addMeet, setAddMeet] = useState(false)
+  const [knownEmails, setKnownEmails] = useState<string[]>([])
   const titleRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => titleRef.current?.focus(), [])
+  useEffect(() => {
+    titleRef.current?.focus()
+    void getKnownEmails().then(setKnownEmails)
+  }, [])
+
+  function addGuest(raw: string): void {
+    const email = raw.trim().replace(/,$/, '')
+    if (email && /.+@.+\..+/.test(email) && !guests.includes(email)) {
+      setGuests([...guests, email])
+    }
+    setGuestInput('')
+  }
 
   const close = () => (editor.value = null)
 
@@ -62,11 +80,22 @@ function EditorForm() {
     const start = toGTime(startMs, allDay)
     const end = toGTime(endMs, allDay)
 
+    const meetRequest = addMeet
+      ? {
+          createRequest: {
+            requestId: crypto.randomUUID(),
+            conferenceSolutionKey: { type: 'hangoutsMeet' },
+          },
+        }
+      : undefined
+
     if (st.mode === 'create') {
       const fields: Partial<GEvent> & { start: GDateTime; end: GDateTime } = { start, end }
       if (summary) fields.summary = summary
       if (location) fields.location = location
       if (description) fields.description = description
+      if (guests.length) fields.attendees = guests.map((email) => ({ email }))
+      if (meetRequest) fields.conferenceData = meetRequest
       await createEvent(calendarId, fields)
     } else if (st.original) {
       const patch: Partial<GEvent> = {}
@@ -77,6 +106,14 @@ function EditorForm() {
         patch.start = start
         patch.end = end
       }
+      const origEmails = (st.original.attendees ?? []).map((a) => a.email).filter(Boolean)
+      if (JSON.stringify(guests) !== JSON.stringify(origEmails)) {
+        // Preserve existing attendee objects (responses) for retained guests.
+        patch.attendees = guests.map(
+          (email): GAttendee => st.original!.attendees?.find((a) => a.email === email) ?? { email },
+        )
+      }
+      if (meetRequest) patch.conferenceData = meetRequest
       if (Object.keys(patch).length) await patchEvent(st.original, patch)
     }
     close()
@@ -140,6 +177,46 @@ function EditorForm() {
           {!allDay && <input type="time" value={endTime} onInput={(e) => setEndTime(e.currentTarget.value)} />}
           <input type="date" value={endDate} onInput={(e) => setEndDate(e.currentTarget.value)} />
         </div>
+        <div class="guest-box">
+          {guests.map((g) => (
+            <span key={g} class="guest-chip">
+              {g}
+              <button type="button" class="guest-x" onClick={() => setGuests(guests.filter((x) => x !== g))}>
+                ✕
+              </button>
+            </span>
+          ))}
+          <input
+            class="guest-input"
+            placeholder={guests.length ? 'Add guest' : 'Add guests'}
+            list="known-emails"
+            value={guestInput}
+            onInput={(e) => setGuestInput(e.currentTarget.value)}
+            onChange={(e) => addGuest(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && guestInput.trim()) {
+                e.preventDefault()
+                addGuest(guestInput)
+              } else if (e.key === 'Backspace' && !guestInput && guests.length) {
+                setGuests(guests.slice(0, -1))
+              }
+            }}
+          />
+          <datalist id="known-emails">
+            {knownEmails
+              .filter((k) => !guests.includes(k))
+              .slice(0, 50)
+              .map((k) => (
+                <option key={k} value={k} />
+              ))}
+          </datalist>
+        </div>
+        {!st.original?.hangoutLink && (
+          <label class="editor-check">
+            <input type="checkbox" checked={addMeet} onChange={(e) => setAddMeet(e.currentTarget.checked)} />
+            Add Google Meet video conferencing
+          </label>
+        )}
         <input
           class="editor-field"
           placeholder="Location"
