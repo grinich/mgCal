@@ -10,10 +10,24 @@ export interface Positioned {
   z: number
 }
 
-/** Timed events for one day column: cluster overlap partitioning with a
- * Google-style cascade — chips expand ~70% into the next column's slot and
- * later columns stack on top, so titles stay readable in dense clusters. */
-export function layoutDay(events: EventRow[], dayStartMs: number): Positioned[] {
+export interface Overflow {
+  top: number
+  height: number
+  events: EventRow[]
+}
+
+export interface DayLayout {
+  chips: Positioned[]
+  overflows: Overflow[]
+}
+
+const OVERFLOW_RAIL_PCT = 11 // right rail reserved for the +N pill
+
+/** Timed events for one day column. Overlap clusters lay out as a Google-style
+ * cascade (chips expand ~70% into the next slot, later columns stack on top),
+ * capped at `maxCols` visible columns — anything denser collapses into a "+N"
+ * pill so the visible chips stay readable. */
+export function layoutDay(events: EventRow[], dayStartMs: number, maxCols = 3): DayLayout {
   const dayEndMs = dayStartMs + DAY
   const items = events
     .map((ev) => {
@@ -23,35 +37,53 @@ export function layoutDay(events: EventRow[], dayStartMs: number): Positioned[] 
     })
     .sort((a, b) => a.start - b.start || b.end - a.end)
 
-  const out: Positioned[] = []
+  const chips: Positioned[] = []
+  const overflows: Overflow[] = []
   let cluster: { ev: EventRow; start: number; end: number; col: number }[] = []
   let clusterEnd = -Infinity
 
+  const yOf = (ms: number) => ((ms - dayStartMs) / HOUR) * HOUR_H
+
   const flush = () => {
     if (!cluster.length) return
-    const cols = Math.max(...cluster.map((c) => c.col)) + 1
-    const slot = 100 / cols
-    for (const c of cluster) {
-      // Nearest column to the right containing a chip that overlaps in time —
-      // we may expand up to 70% into its slot (it will render on top of us).
+    const visible = cluster.filter((c) => c.col < maxCols)
+    const hidden = cluster.filter((c) => c.col >= maxCols)
+    const cols = Math.max(...visible.map((c) => c.col)) + 1
+    const usable = hidden.length ? 100 - OVERFLOW_RAIL_PCT : 100
+    const slot = usable / cols
+
+    for (const c of visible) {
+      // Nearest visible column to the right whose chip overlaps in time — we
+      // may expand up to 70% into its slot (it renders on top of us).
       let next = cols
-      for (const o of cluster) {
+      for (const o of visible) {
         if (o.col > c.col && o.col < next && o.start < c.end && o.end > c.start) next = o.col
       }
       const leftPct = c.col * slot
       const widthPct =
         next < cols
-          ? Math.min(100 - leftPct, (next - c.col) * slot + slot * 0.7)
-          : 100 - leftPct
-      out.push({
+          ? Math.min(usable - leftPct, (next - c.col) * slot + slot * 0.7)
+          : usable - leftPct
+      chips.push({
         ev: c.ev,
-        top: ((c.start - dayStartMs) / HOUR) * HOUR_H,
-        height: Math.max(((c.end - c.start) / HOUR) * HOUR_H - 2, 17),
+        top: yOf(c.start),
+        height: Math.max(yOf(c.end) - yOf(c.start) - 2, 17),
         leftPct,
         widthPct,
         z: 2 + c.col,
       })
     }
+
+    if (hidden.length) {
+      const top = Math.min(...hidden.map((h) => yOf(h.start)))
+      const bottom = Math.max(...hidden.map((h) => yOf(h.end)))
+      overflows.push({
+        top,
+        height: Math.max(Math.min(bottom - top - 2, 44), 20),
+        events: hidden.map((h) => h.ev).sort((a, b) => a.startMs - b.startMs),
+      })
+    }
+
     cluster = []
     clusterEnd = -Infinity
   }
@@ -67,7 +99,7 @@ export function layoutDay(events: EventRow[], dayStartMs: number): Positioned[] 
     clusterEnd = Math.max(clusterEnd, it.end)
   }
   flush()
-  return out
+  return { chips, overflows }
 }
 
 export interface Lane {

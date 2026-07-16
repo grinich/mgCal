@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from 'preact/hooks'
 import type { EventRow } from '../../data/types'
-import { nowMs, openEdit, selectedKey } from '../state/signals'
+import { nowMs, openEdit, overflowList, selectedKey } from '../state/signals'
 import { DAY, DOW, defaultScrollTop, fmtTime, fmtTimeShort, HOUR, HOUR_H, isSameDay } from '../time'
 import { layoutDay, layoutLanes, splitAllDay } from './layout'
 import { chipColor, EventChip, eventKey, isDeclined, toggleSelect } from './EventChip'
@@ -89,7 +89,7 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
             ))}
           </div>
           {days.map((d) => (
-            <DayColumn key={d.getTime()} day={d} events={timed} geom={geom} />
+            <DayColumn key={d.getTime()} day={d} events={timed} geom={geom} maxCols={days.length === 1 ? 6 : 3} />
           ))}
           <div class="hour-lines" />
         </div>
@@ -98,13 +98,23 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
   )
 }
 
-function DayColumn({ day, events, geom }: { day: Date; events: EventRow[]; geom: GridGeom }) {
+function DayColumn({
+  day,
+  events,
+  geom,
+  maxCols,
+}: {
+  day: Date
+  events: EventRow[]
+  geom: GridGeom
+  maxCols: number
+}) {
   const dayStartMs = day.getTime()
   const dayEndMs = dayStartMs + DAY
   const now = nowMs.value
   const isToday = isSameDay(day, new Date(now))
   const dayEvents = events.filter((e) => e.startMs < dayEndMs && e.endMs > dayStartMs)
-  const positioned = layoutDay(dayEvents, dayStartMs)
+  const { chips, overflows } = layoutDay(dayEvents, dayStartMs, maxCols)
 
   const d = drag.value
   let ghost: { top: number; height: number; label: string; color?: string } | null = null
@@ -124,7 +134,7 @@ function DayColumn({ day, events, geom }: { day: Date; events: EventRow[]; geom:
 
   return (
     <div class="day-col" onPointerDown={(e) => e.target === e.currentTarget && startCreateDrag(e, geom)}>
-      {positioned.map((p) => (
+      {chips.map((p) => (
         <EventChip
           key={eventKey(p.ev)}
           ev={p.ev}
@@ -135,6 +145,21 @@ function DayColumn({ day, events, geom }: { day: Date; events: EventRow[]; geom:
           z={p.z}
           geom={geom}
         />
+      ))}
+      {overflows.map((o) => (
+        <button
+          key={`more-${o.top}`}
+          class="chip-more"
+          style={{ top: `${o.top}px`, height: `${o.height}px` }}
+          title={`${o.events.length} more events`}
+          onClick={(e) => {
+            e.stopPropagation()
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            overflowList.value = { events: o.events, anchor: { x: r.x, y: r.y, w: r.width, h: r.height } }
+          }}
+        >
+          +{o.events.length}
+        </button>
       ))}
       {ghost && (
         <div

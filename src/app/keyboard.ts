@@ -6,6 +6,7 @@ import {
   navigate,
   openCreate,
   openEdit,
+  overflowList,
   scopeDialog,
   searchOpen,
   selectedEvent,
@@ -54,6 +55,7 @@ export function initKeyboard(): void {
   bindKey('Delete', deleteSelected)
   bindKey('Escape', () => {
     if (scopeDialog.value) scopeDialog.value.resolve(null)
+    else if (overflowList.value) overflowList.value = null
     else if (editor.value) editor.value = null
     else if (searchOpen.value) searchOpen.value = false
     else if (helpOpen.value) helpOpen.value = false

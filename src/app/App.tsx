@@ -11,6 +11,7 @@ import { EventEditor } from './event/EventEditor'
 import { EventPopover } from './event/EventPopover'
 import { RecurrenceScopeDialog } from './event/RecurrenceScopeDialog'
 import { SearchOverlay } from './search/SearchOverlay'
+import { OverflowPopover } from './views/OverflowPopover'
 import { Toasts } from './Toasts'
 
 export function App() {
@@ -41,6 +42,7 @@ export function App() {
       <EventEditor />
       <RecurrenceScopeDialog />
       <SearchOverlay />
+      <OverflowPopover />
       <Toasts />
     </div>
   )
