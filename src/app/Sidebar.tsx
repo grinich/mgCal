@@ -1,11 +1,12 @@
+import type { CalendarRow } from '../data/types'
 import { calendars, sidebarOpen, toggleCalendarHidden } from './state/signals'
 
-export function Sidebar() {
-  if (!sidebarOpen.value) return null
+function Section({ title, items }: { title: string; items: CalendarRow[] }) {
+  if (!items.length) return null
   return (
-    <aside class="sidebar">
-      <div class="sidebar-title">Calendars</div>
-      {calendars.value.map((c) => (
+    <div class="sidebar-section">
+      <div class="sidebar-title">{title}</div>
+      {items.map((c) => (
         <label key={c.id} class="cal-row" title={c.id}>
           <span
             class={'cal-dot' + (c.hidden ? ' off' : '')}
@@ -20,6 +21,21 @@ export function Sidebar() {
           <span class={'cal-name' + (c.hidden ? ' off' : '')}>{c.summary}</span>
         </label>
       ))}
+    </div>
+  )
+}
+
+export function Sidebar() {
+  const cals = calendars.value
+  const mine = cals.filter((c) => c.accessRole === 'owner')
+  const shared = cals.filter((c) => c.accessRole !== 'owner')
+  // Stays mounted so open/close animates (margin slide + fade).
+  return (
+    <aside class={'sidebar' + (sidebarOpen.value ? '' : ' closed')}>
+      <div class="sidebar-inner">
+        <Section title="My calendars" items={mine} />
+        <Section title="Other calendars" items={shared} />
+      </div>
     </aside>
   )
 }
