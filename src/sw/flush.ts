@@ -1,8 +1,8 @@
 import { api, ApiError } from '../google/api'
 import { AuthError } from '../google/auth'
-import { db, getSetting, normalizeEvent, setSetting, shiftGTime, type DB } from '../data/db'
-import { stripCount, truncateRecurrence, untilBefore } from '../data/rrule'
-import type { GAttendee, GEvent, OutboxOp, SplitPayload } from '../data/types'
+import { db, getSetting, normalizeEvent, parseGTime, setSetting, shiftGTime, type DB } from '../data/db'
+import { getCount, replaceCount, stripCount, truncateRecurrence, untilBefore } from '../data/rrule'
+import type { GAttendee, GDateTime, GEvent, OutboxOp, SplitPayload } from '../data/types'
 
 export interface ConflictRecord {
   id: string
@@ -17,6 +17,7 @@ export interface ConflictRecord {
 }
 
 let flushing = false
+let lastJanitor = 0
 
 export async function flushOutbox(): Promise<void> {
   if (flushing) return
@@ -31,7 +32,10 @@ export async function flushOutbox(): Promise<void> {
 async function flushInner(): Promise<void> {
   const d = await db()
   const ops = await d.getAll('outbox') // ascending seq
-  if (!ops.length) return
+  if (!ops.length) {
+    await janitor(d)
+    return
+  }
   const blocked = new Set<string>()
   const changed = new Set<string>()
 
@@ -48,6 +52,9 @@ async function flushInner(): Promise<void> {
     } catch (e) {
       blocked.add(ek)
       if (e instanceof AuthError) break
+      // 401 after the token-refresh retry: auth is broken, not this op — hold
+      // everything for re-auth rather than converting edits into conflicts.
+      if (e instanceof ApiError && e.status === 401) break
       if (e instanceof ApiError && e.status === 412) {
         await onConflict(d, op, 'This event changed on the server while your edit was pending.')
         changed.add(op.calendarId)
@@ -73,7 +80,22 @@ function evPath(op: Pick<OutboxOp, 'calendarId'>): string {
   return `/calendars/${encodeURIComponent(op.calendarId)}/events`
 }
 
+async function genFor(d: DB, calendarId: string): Promise<number> {
+  return (await d.get('syncState', calendarId))?.baselineGen ?? 0
+}
+
+async function opsFor(d: DB, calendarId: string, eventId: string): Promise<OutboxOp[]> {
+  return d.getAllFromIndex('outbox', 'byEvent', IDBKeyRange.only([calendarId, eventId]))
+}
+
 async function execOp(d: DB, op: OutboxOp): Promise<void> {
+  if (op.opType === 'splitRecurring') {
+    await execSplitRecurring(d, op)
+    await reconcileSiblings(d, op.calendarId, op.eventId)
+    await d.delete('outbox', op.seq!)
+    return
+  }
+
   const sentPayload = JSON.stringify(op.payload)
   let server: GEvent | undefined
 
@@ -132,6 +154,7 @@ async function execOp(d: DB, op: OutboxOp): Promise<void> {
         if (!gone) throw e
       }
       await d.delete('events', [op.calendarId, op.eventId])
+      if (op.master) await purgeSiblings(d, op.calendarId, op.eventId)
       await d.delete('outbox', op.seq!)
       return
     }
@@ -147,42 +170,60 @@ async function execOp(d: DB, op: OutboxOp): Promise<void> {
       })
       break
     }
-    case 'splitRecurring': {
-      await execSplitRecurring(d, op)
-      // The op mutates its own payload (phase snapshot); skip generic
-      // coalescing bookkeeping — a split is never coalesced into.
-      await d.delete('outbox', op.seq!)
-      return
+  }
+
+  // ---- success bookkeeping ----
+  // The page may have coalesced more edits into this op while it was in
+  // flight — only treat the op as settled if the payload we sent is current.
+  const cur = await d.get('outbox', op.seq!)
+  const payloadChanged = !!cur && JSON.stringify(cur.payload) !== sentPayload
+  const remaining = (await opsFor(d, op.calendarId, op.eventId)).filter((o) => o.seq !== op.seq)
+  const row = await d.get('events', [op.calendarId, op.eventId])
+
+  // Recurrence masters are never stored as rows (the grid shows expanded
+  // instances only) — drop optimistic stand-ins and reconcile siblings.
+  const isMaster = op.master || !!server?.recurrence?.length
+  if (isMaster) {
+    if (op.opType === 'create') await d.delete('events', [op.calendarId, op.eventId])
+    if (op.master) await reconcileSiblings(d, op.calendarId, op.eventId)
+  } else if (server) {
+    if (!row) {
+      // Deleted locally while this op was in flight: the event now exists on
+      // the server with no local trace — push a compensating delete.
+      if (!cur && !remaining.some((o) => o.opType === 'delete')) {
+        await d.add('outbox', {
+          opType: 'delete',
+          calendarId: op.calendarId,
+          eventId: op.eventId,
+          payload: {},
+          ifMatchEtag: server.etag,
+          attempts: 0,
+          nextAttemptMs: 0,
+          createdMs: Date.now(),
+        })
+      }
+    } else if (!remaining.length && !payloadChanged) {
+      await d.put('events', normalizeEvent(server, op.calendarId, await genFor(d, op.calendarId)))
+    } else {
+      // Later/merged edits still pending: keep optimistic fields, refresh etags
+      // everywhere so queued ops don't 412 against their own ancestor.
+      row.etag = server.etag
+      await d.put('events', row)
+      for (const r of remaining) {
+        if (r.ifMatchEtag) {
+          r.ifMatchEtag = server.etag
+          await d.put('outbox', r)
+        }
+      }
     }
   }
 
-  // Recurrence masters are never stored as rows (the grid shows expanded
-  // instances only) — drop the optimistic stand-in and let sync fill in.
-  if (server?.recurrence?.length || op.master) {
-    if (op.opType === 'create') await d.delete('events', [op.calendarId, op.eventId])
-    server = undefined
-  }
-
-  // Success bookkeeping. The page may have coalesced more edits into this op
-  // while it was in flight — only remove it if the payload we sent is current.
-  const cur = await d.get('outbox', op.seq!)
-  if (cur && JSON.stringify(cur.payload) !== sentPayload) {
+  if (payloadChanged && cur) {
     cur.ifMatchEtag = server?.etag ?? cur.ifMatchEtag
     if (cur.opType === 'create') cur.opType = 'patch' // it exists now; remaining delta is a patch
     await d.put('outbox', cur)
   } else if (cur) {
     await d.delete('outbox', cur.seq!)
-  }
-
-  if (server) {
-    const remaining = await d.getAllFromIndex('outbox', 'byEvent', IDBKeyRange.only([op.calendarId, op.eventId]))
-    const row = await d.get('events', [op.calendarId, op.eventId])
-    if (!remaining.length) {
-      await d.put('events', normalizeEvent(server, op.calendarId, row?.baselineGen ?? 0))
-    } else if (row) {
-      row.etag = server.etag // keep optimistic fields; later ops still pending
-      await d.put('events', row)
-    }
   }
 }
 
@@ -198,11 +239,31 @@ const CLONE_FIELDS = [
   'recurrence',
 ] as const
 
+function withTz(g: GDateTime | undefined, tz: string | undefined): GDateTime | undefined {
+  if (g?.dateTime && !g.timeZone && tz) return { ...g, timeZone: tz }
+  return g
+}
+
+/** Count series instances that start before splitMs (for COUNT rebalancing). */
+async function countInstancesBefore(op: OutboxOp, splitMs: number): Promise<number> {
+  let count = 0
+  let pageToken: string | undefined
+  do {
+    const resp = await api<{ items?: unknown[]; nextPageToken?: string }>(
+      `${evPath(op)}/${op.eventId}/instances`,
+      { query: { maxResults: 250, timeMax: new Date(splitMs).toISOString(), pageToken } },
+    )
+    count += resp.items?.length ?? 0
+    pageToken = resp.nextPageToken
+  } while (pageToken && count < 5000)
+  return count
+}
+
 /**
- * "This and following": truncate the master's RRULE before the split instance,
- * then (unless deleting) create a new series starting at the edited instance.
- * Resumable: phase 1 = master truncated; the payload snapshots the master so a
- * killed worker can still build the new series without re-reading pre-split state.
+ * "This and following". Phase 0 creates the tail series FIRST (a failure
+ * leaves the original series intact and retryable; truncating first could
+ * permanently orphan future occurrences). Phase 1 truncates the original
+ * master's RRULE before the split point. Both phases are idempotent.
  */
 async function execSplitRecurring(d: DB, op: OutboxOp): Promise<void> {
   const p = op.payload as unknown as SplitPayload
@@ -211,41 +272,163 @@ async function execSplitRecurring(d: DB, op: OutboxOp): Promise<void> {
   if (!op.phase || op.phase < 1) {
     const master = await api<GEvent>(masterPath)
     if (!master.recurrence?.length) throw new ApiError(400, 'badSplit', 'Event is not a recurring master')
-    const snapshot: Partial<GEvent> = {}
-    for (const f of CLONE_FIELDS) if (master[f] !== undefined) (snapshot as any)[f] = master[f]
+    const tz = master.start?.timeZone
+
+    // Splitting at the first instance means the whole series: Google rejects
+    // an UNTIL before DTSTART, and this matches Google Calendar's own behavior.
+    const splitMs = parseGTime(p.instanceOriginalStart) ?? 0
+    const masterStartMs = parseGTime(master.start) ?? 0
+    if (splitMs <= masterStartMs) {
+      if (p.deleteOnly) {
+        try {
+          await api<void>(masterPath, { method: 'DELETE', query: { sendUpdates: 'all' }, ifMatch: master.etag })
+        } catch (e) {
+          if (!(e instanceof ApiError && (e.status === 404 || e.status === 410))) throw e
+        }
+      } else {
+        await api<GEvent>(masterPath, {
+          method: 'PATCH',
+          query: { conferenceDataVersion: 1, sendUpdates: 'all' },
+          body: { ...p.fields, start: withTz(p.newStart, tz), end: withTz(p.newEnd, tz) },
+          ifMatch: master.etag,
+        })
+      }
+      return
+    }
+
+    let createTail = !p.deleteOnly
+    if (createTail) {
+      const snapshot: Partial<GEvent> = {}
+      for (const f of CLONE_FIELDS) if (master[f] !== undefined) (snapshot as Record<string, unknown>)[f] = master[f]
+      let recurrence = stripCount(master.recurrence)
+      const count = getCount(master.recurrence)
+      if (count !== undefined) {
+        const consumed = await countInstancesBefore(op, splitMs)
+        const left = count - consumed
+        if (left <= 0) createTail = false // COUNT exhausted before the split — nothing to recreate
+        else recurrence = replaceCount(master.recurrence, left)
+      }
+      if (createTail) {
+        try {
+          await api<GEvent>(evPath(op), {
+            method: 'POST',
+            query: { conferenceDataVersion: 1, sendUpdates: 'all' },
+            body: {
+              ...snapshot,
+              ...p.fields,
+              id: p.newId,
+              start: withTz(p.newStart, tz),
+              end: withTz(p.newEnd, tz),
+              recurrence,
+            },
+          })
+        } catch (e) {
+          // 409: the tail already exists from a previous attempt.
+          if (!(e instanceof ApiError && e.status === 409)) throw e
+        }
+      }
+    }
+    op.phase = 1
+    await d.put('outbox', op)
+  }
+
+  // Phase 1: truncate the original series. Re-fetch for a current etag.
+  const fresh = await api<GEvent>(masterPath)
+  if (fresh.recurrence?.length) {
     const until = untilBefore(p.instanceOriginalStart)
     await api<GEvent>(masterPath, {
       method: 'PATCH',
       query: { sendUpdates: 'all' },
-      body: { recurrence: truncateRecurrence(master.recurrence, until) },
-      ifMatch: master.etag,
+      body: { recurrence: truncateRecurrence(fresh.recurrence, until) },
+      ifMatch: fresh.etag,
     })
-    op.phase = 1
-    p.masterSnapshot = snapshot
-    await d.put('outbox', op)
   }
+}
 
-  if (p.deleteOnly) return
-
-  const snap = (p.masterSnapshot ?? {}) as Partial<GEvent>
-  const body: Record<string, unknown> = {
-    ...snap,
-    ...p.fields,
-    id: p.newId,
-    start: p.newStart,
-    end: p.newEnd,
-    recurrence: stripCount((snap.recurrence ?? []) as string[]),
+/** After a master-level op lands: purge scope-deleted rows and unlock shifted
+ * ones (unless a per-instance op still owns them). The next sync brings truth. */
+async function reconcileSiblings(d: DB, calendarId: string, masterId: string): Promise<void> {
+  const rows = (await d.getAllFromIndex('events', 'byMaster', IDBKeyRange.only(masterId))).filter(
+    (r) => r.calendarId === calendarId,
+  )
+  for (const row of rows) {
+    if (!row.pending) continue
+    const ownOps = await opsFor(d, calendarId, row.id)
+    if (ownOps.length) continue
+    if (row.pending === 'delete') {
+      await d.delete('events', [calendarId, row.id])
+    } else {
+      row.pending = undefined
+      await d.put('events', row)
+    }
   }
+}
+
+async function purgeSiblings(d: DB, calendarId: string, masterId: string): Promise<void> {
+  const rows = (await d.getAllFromIndex('events', 'byMaster', IDBKeyRange.only(masterId))).filter(
+    (r) => r.calendarId === calendarId,
+  )
+  for (const row of rows) await d.delete('events', [calendarId, row.id])
+}
+
+/** After a failed master op, optimistic sibling edits are wrong and unchanged
+ * server events won't be resent by incremental sync — refetch the series'
+ * instances directly to restore local truth. */
+async function restoreSeries(d: DB, calendarId: string, masterId: string): Promise<void> {
+  const s = await d.get('syncState', calendarId)
+  const gen = s?.baselineGen ?? 0
+  const items: GEvent[] = []
+  let pageToken: string | undefined
   try {
-    await api<GEvent>(evPath(op), {
-      method: 'POST',
-      query: { conferenceDataVersion: 1, sendUpdates: 'all' },
-      body,
-    })
-  } catch (e) {
-    // 409: new series already created by a previous attempt.
-    if (!(e instanceof ApiError && e.status === 409)) throw e
+    do {
+      const resp = await api<{ items?: GEvent[]; nextPageToken?: string }>(
+        `/calendars/${encodeURIComponent(calendarId)}/events/${masterId}/instances`,
+        {
+          query: {
+            maxResults: 250,
+            pageToken,
+            timeMin: s?.windowStartMs ? new Date(s.windowStartMs).toISOString() : undefined,
+            timeMax: s?.windowEndMs ? new Date(s.windowEndMs).toISOString() : undefined,
+          },
+        },
+      )
+      items.push(...(resp.items ?? []))
+      pageToken = resp.nextPageToken
+    } while (pageToken)
+  } catch {
+    // Series gone (or unreadable) server-side — drop the local copies.
+    await purgeSiblings(d, calendarId, masterId)
+    return
   }
+  const seen = new Set(items.map((i) => i.id))
+  const rows = (await d.getAllFromIndex('events', 'byMaster', IDBKeyRange.only(masterId))).filter(
+    (r) => r.calendarId === calendarId,
+  )
+  for (const row of rows) {
+    if (!seen.has(row.id)) await d.delete('events', [calendarId, row.id])
+  }
+  for (const item of items) {
+    if (item.status === 'cancelled') await d.delete('events', [calendarId, item.id])
+    else await d.put('events', normalizeEvent(item, calendarId, gen))
+  }
+}
+
+/** Clear pending flags orphaned by a crash between row and op writes; without
+ * this a stuck flag would shield the row from sync forever. */
+async function janitor(d: DB): Promise<void> {
+  if (Date.now() - lastJanitor < 60_000) return
+  lastJanitor = Date.now()
+  const rows = await d.getAll('events')
+  const changed = new Set<string>()
+  for (const row of rows) {
+    if (!row.pending) continue
+    if ((await opsFor(d, row.calendarId, row.id)).length) continue
+    if (row.recurringEventId && (await opsFor(d, row.calendarId, row.recurringEventId)).length) continue
+    row.pending = undefined
+    await d.put('events', row)
+    changed.add(row.calendarId)
+  }
+  if (changed.size) broadcast({ type: 'db-updated', calendarIds: [...changed] })
 }
 
 /** Server wins locally; the edit is preserved in a conflict record for retry. */
@@ -258,13 +441,23 @@ async function onConflict(d: DB, op: OutboxOp, message: string): Promise<void> {
     /* deleted or inaccessible */
   }
   const row = await d.get('events', [op.calendarId, op.eventId])
-  if (server && server.status !== 'cancelled') {
-    await d.put('events', normalizeEvent(server, op.calendarId, row?.baselineGen ?? 0))
+  const isMaster = op.master || !!server?.recurrence?.length
+  if (isMaster) {
+    // Never store masters as rows; refetch the series so optimistic sibling
+    // edits (which incremental sync won't correct) snap back to server truth.
+    await d.delete('events', [op.calendarId, op.eventId])
+    await restoreSeries(d, op.calendarId, op.eventId)
+  } else if (server && server.status !== 'cancelled') {
+    await d.put('events', normalizeEvent(server, op.calendarId, await genFor(d, op.calendarId)))
   } else {
     await d.delete('events', [op.calendarId, op.eventId])
   }
   const summary =
-    (op.payload.summary as string | undefined) ?? server?.summary ?? row?.summary ?? '(no title)'
+    (op.payload.summary as string | undefined) ??
+    ((op.payload as unknown as SplitPayload).fields?.summary as string | undefined) ??
+    server?.summary ??
+    row?.summary ??
+    '(no title)'
   const conflicts = (await getSetting<ConflictRecord[]>('conflicts')) ?? []
   conflicts.push({
     id: `${op.seq}-${Date.now()}`,

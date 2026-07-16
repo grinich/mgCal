@@ -139,15 +139,28 @@ async function syncCalendar(d: DB, cal: CalendarRow, s: SyncStateRow): Promise<b
       await d.put('syncState', s)
     }
     for (;;) {
-      const resp = await api<EventsPage>(path, {
-        query: {
-          singleEvents: true,
-          maxResults: 250,
-          timeMin: new Date(s.windowStartMs!).toISOString(),
-          timeMax: new Date(s.windowEndMs!).toISOString(),
-          pageToken: s.pageToken,
-        },
-      })
+      let resp: EventsPage
+      try {
+        resp = await api<EventsPage>(path, {
+          query: {
+            singleEvents: true,
+            maxResults: 250,
+            timeMin: new Date(s.windowStartMs!).toISOString(),
+            timeMax: new Date(s.windowEndMs!).toISOString(),
+            pageToken: s.pageToken,
+          },
+        })
+      } catch (e) {
+        // A stale persisted pageToken (worker resumed much later) 400s forever;
+        // reset so the next pass restarts the baseline from scratch.
+        if (e instanceof ApiError && !e.isRetryable && e.status !== 401) {
+          s.pageToken = undefined
+          s.syncToken = undefined
+          s.phase = 'idle'
+          await d.put('syncState', s)
+        }
+        throw e
+      }
       changed += await upsertPage(d, cal.id, resp.items ?? [], s.baselineGen)
       if (resp.nextPageToken) {
         // Persist after every page so a killed worker resumes mid-baseline.
@@ -296,6 +309,15 @@ async function syncCalendarList(d: DB): Promise<void> {
       cur = await cur.continue()
     }
     await etx.done
+    // Queued ops for a vanished calendar would only 404 into spurious conflicts.
+    const otx = d.transaction('outbox', 'readwrite')
+    const oidx = otx.store.index('byEvent')
+    let ocur = await oidx.openCursor(IDBKeyRange.bound([c.id, ''], [c.id, '￿']))
+    while (ocur) {
+      await ocur.delete()
+      ocur = await ocur.continue()
+    }
+    await otx.done
   }
 }
 

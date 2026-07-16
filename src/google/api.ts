@@ -14,7 +14,10 @@ export class ApiError extends Error {
     return (
       this.status === 429 ||
       this.status >= 500 ||
-      (this.status === 403 && (this.reason === 'rateLimitExceeded' || this.reason === 'userRateLimitExceeded'))
+      (this.status === 403 &&
+        ['rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded', 'dailyLimitExceeded'].includes(
+          this.reason,
+        ))
     )
   }
 }

@@ -74,11 +74,12 @@ export function parseGTime(t?: { date?: string; dateTime?: string }): number | u
   return undefined
 }
 
-/** Shift a Google date/dateTime by deltaMs, preserving its all-day-ness. */
+/** Shift a Google date/dateTime by deltaMs, preserving all-day-ness and timeZone.
+ * The timeZone must survive: recurring-event writes require start/end.timeZone. */
 export function shiftGTime(
-  g: { date?: string; dateTime?: string } | undefined,
+  g: { date?: string; dateTime?: string; timeZone?: string } | undefined,
   deltaMs: number,
-): { date?: string; dateTime?: string } | undefined {
+): { date?: string; dateTime?: string; timeZone?: string } | undefined {
   if (!g) return undefined
   const ms = (parseGTime(g) ?? 0) + deltaMs
   if (g.date) {
@@ -87,7 +88,9 @@ export function shiftGTime(
       date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
     }
   }
-  return { dateTime: new Date(ms).toISOString() }
+  return g.timeZone
+    ? { dateTime: new Date(ms).toISOString(), timeZone: g.timeZone }
+    : { dateTime: new Date(ms).toISOString() }
 }
 
 /** Events overlapping [startMs, endMs), across all calendars. */

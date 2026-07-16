@@ -57,6 +57,32 @@ export function stripCount(recurrence: string[]): string[] {
   })
 }
 
+/** Whether any RRULE line carries a COUNT bound, and its value. */
+export function getCount(recurrence: string[]): number | undefined {
+  for (const line of recurrence) {
+    if (!line.toUpperCase().startsWith('RRULE:')) continue
+    const m = /(?:^|;)COUNT=(\d+)/i.exec(line.slice(6))
+    if (m) return Number(m[1])
+  }
+  return undefined
+}
+
+/** Replace/insert COUNT=n on the RRULE line (used for post-split tails). */
+export function replaceCount(recurrence: string[], n: number): string[] {
+  return recurrence.map((line) => {
+    if (!line.toUpperCase().startsWith('RRULE:')) return line
+    const parts = line
+      .slice(6)
+      .split(';')
+      .filter((p) => {
+        const k = p.split('=')[0]?.toUpperCase()
+        return k !== 'COUNT' && k !== 'UNTIL'
+      })
+    parts.push(`COUNT=${n}`)
+    return 'RRULE:' + parts.join(';')
+  })
+}
+
 const BYDAY = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
 
 export type RecurrencePreset = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'weekdays'

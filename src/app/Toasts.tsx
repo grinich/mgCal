@@ -12,7 +12,7 @@ export function Toasts() {
             <span>{c.message}</span>
           </div>
           <div class="toast-actions">
-            {c.opType !== 'create' && (
+            {c.opType !== 'create' && c.opType !== 'splitRecurring' && (
               <button class="btn" onClick={() => void retryConflict(c)}>
                 {c.opType === 'delete' ? 'Delete anyway' : 'Retry with my version'}
               </button>
