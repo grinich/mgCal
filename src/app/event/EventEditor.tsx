@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { createEvent, deleteEventScoped, patchEventScoped } from '../../data/outbox'
 import { presetLabel, presetRule, type RecurrencePreset } from '../../data/rrule'
 import type { GAttendee, GDateTime, GEvent } from '../../data/types'
-import { askScope, calendars, editor, selectedKey, writableCalendars } from '../state/signals'
+import { EVENT_COLORS } from '../colors'
+import { askScope, calendarById, calendars, editor, selectedKey, writableCalendars } from '../state/signals'
 import { DAY, startOfDay } from '../time'
 import { getKnownEmails } from './emails'
 
@@ -51,6 +52,7 @@ function EditorForm() {
   const [guestInput, setGuestInput] = useState('')
   const [addMeet, setAddMeet] = useState(false)
   const [repeat, setRepeat] = useState<RecurrencePreset>('none')
+  const [colorId, setColorId] = useState<string>(st.original?.colorId ?? '')
   const [knownEmails, setKnownEmails] = useState<string[]>([])
   const titleRef = useRef<HTMLInputElement>(null)
 
@@ -102,6 +104,7 @@ function EditorForm() {
       if (meetRequest) fields.conferenceData = meetRequest
       const rule = presetRule(repeat, new Date(startMs))
       if (rule) fields.recurrence = rule
+      if (colorId) fields.colorId = colorId
       await createEvent(calendarId, fields)
     } else if (st.original) {
       const patch: Partial<GEvent> = {}
@@ -120,6 +123,10 @@ function EditorForm() {
         )
       }
       if (meetRequest) patch.conferenceData = meetRequest
+      if (colorId !== (st.original.colorId ?? '')) {
+        // Empty string = revert to calendar default (null clears it server-side).
+        patch.colorId = (colorId || null) as unknown as string
+      }
       if (Object.keys(patch).length) {
         const scope = await askScope(st.original, 'edit')
         if (!scope) return // keep the editor open
@@ -243,6 +250,28 @@ function EditorForm() {
             Add Google Meet video conferencing
           </label>
         )}
+        <div class="color-picker">
+          <button
+            type="button"
+            class={'color-dot default' + (colorId === '' ? ' sel' : '')}
+            title="Calendar default"
+            style={{ '--dot': calendarById.value.get(calendarId)?.backgroundColor ?? 'var(--accent)' }}
+            onClick={() => setColorId('')}
+          />
+          {Object.values(EVENT_COLORS).map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              class={'color-dot' + (colorId === c.id ? ' sel' : '')}
+              title={c.label ?? c.name}
+              style={{ '--dot': c.hex }}
+              onClick={() => setColorId(c.id)}
+            />
+          ))}
+          <span class="color-label muted">
+            {colorId ? (EVENT_COLORS[colorId]?.label ?? EVENT_COLORS[colorId]?.name) : 'Calendar color'}
+          </span>
+        </div>
         <input
           class="editor-field"
           placeholder="Location"

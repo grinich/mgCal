@@ -134,6 +134,8 @@
 }
 .chip:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); z-index: 3; }
 .chip.selected { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 4; }
+:root[data-theme='dark'] .chip { background: color-mix(in srgb, var(--c) 32%, var(--bg)); }
+:root[data-theme='dark'] .chip-title { color: color-mix(in srgb, var(--c) 30%, var(--text)); }
 .chip-title {
   font-size: 12px; font-weight: 600; line-height: 1.25;
   color: color-mix(in srgb, var(--c) 45%, var(--text));
@@ -315,6 +317,21 @@
   display: flex; align-items: center; justify-content: space-between;
   border-top: 1px solid var(--border); padding-top: 10px; margin-top: 2px;
 }
+
+/* ---------- color picker ---------- */
+.color-picker { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.color-dot {
+  width: 17px; height: 17px; border-radius: 50%;
+  background: var(--dot); border: none; cursor: pointer; padding: 0;
+  transition: transform 0.08s;
+}
+.color-dot:hover { transform: scale(1.18); }
+.color-dot.sel { outline: 2px solid var(--text); outline-offset: 2px; }
+.color-dot.default { box-shadow: inset 0 0 0 2px var(--bg), inset 0 0 0 3.5px var(--dot); }
+.color-label { font-size: 12px; margin-left: 2px; }
+
+.peek-color-tag { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; }
+.peek-color-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); display: inline-block; }
 
 /* ---------- guest picker ---------- */
 .guest-box {

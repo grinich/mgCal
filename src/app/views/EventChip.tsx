@@ -1,4 +1,5 @@
 import type { EventRow } from '../../data/types'
+import { eventColorHex } from '../colors'
 import { calendarById, openEdit, selectedAnchor, selectedKey } from '../state/signals'
 import { fmtTime } from '../time'
 import { drag, startEventDrag, wasDragged, type GridGeom } from './drag'
@@ -8,7 +9,9 @@ export function eventKey(e: EventRow): string {
 }
 
 export function chipColor(e: EventRow): string {
-  return calendarById.value.get(e.calendarId)?.backgroundColor ?? 'var(--accent)'
+  return (
+    eventColorHex(e.colorId) ?? calendarById.value.get(e.calendarId)?.backgroundColor ?? 'var(--accent)'
+  )
 }
 
 export function isDeclined(e: EventRow): boolean {

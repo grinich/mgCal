@@ -4,6 +4,7 @@ import type { EventRow, GAttendee } from '../../data/types'
 import { askScope, calendarById, editor, openEdit, selectedAnchor, selectedEvent, selectedKey } from '../state/signals'
 import { DAY, fmtTime } from '../time'
 import { chipColor } from '../views/EventChip'
+import { eventColorLabel } from '../colors'
 
 const W = 340
 
@@ -206,7 +207,15 @@ function Popover({ ev }: { ev: EventRow }) {
       {cal && (
         <div class="peek-row">
           <span class="peek-icon"><Icon d={I.cal} /></span>
-          <span class="peek-row-text muted">{cal.summary}</span>
+          <span class="peek-row-text muted">
+            {cal.summary}
+            {eventColorLabel(ev.colorId) && (
+              <span class="peek-color-tag">
+                <span class="peek-color-dot" />
+                {eventColorLabel(ev.colorId)}
+              </span>
+            )}
+          </span>
         </div>
       )}
 
