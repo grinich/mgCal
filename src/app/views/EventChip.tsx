@@ -40,6 +40,19 @@ function canEdit(e: EventRow): boolean {
   return true
 }
 
+/** Locations are often URLs (Zoom links) or long room lists — compact them. */
+function cleanLocation(loc: string): string {
+  const first = loc.split(',')[0]!.trim()
+  if (/^https?:\/\//i.test(first)) {
+    try {
+      return new URL(first).hostname.replace(/^www\./, '')
+    } catch {
+      return first
+    }
+  }
+  return loc
+}
+
 /** Timed event chip, absolutely positioned by the caller. */
 export function EventChip({
   ev,
@@ -69,6 +82,7 @@ export function EventChip({
     <div
       class={
         'chip' +
+        (compact ? ' compact' : '') +
         (selected ? ' selected' : '') +
         (isDeclined(ev) ? ' declined' : '') +
         (ev.pending ? ' pending' : '') +
@@ -79,6 +93,8 @@ export function EventChip({
         height: `${height}px`,
         left: `calc(${leftPct}% + 1px)`,
         width: `calc(${widthPct}% - 3px)`,
+        '--h': `${height}px`,
+        '--w': `calc(${widthPct}% - 3px)`,
         '--z': z,
         '--c': c,
       }}
@@ -93,7 +109,13 @@ export function EventChip({
       }}
     >
       <div class="chip-title">{ev.summary || '(no title)'}</div>
-      {!compact && <div class="chip-time">{fmtTime(ev.startMs)}</div>}
+      <div class="chip-time">
+        {fmtTime(ev.startMs)}
+        <span class="chip-time-end"> – {fmtTime(ev.endMs)}</span>
+      </div>
+      {ev.location && (
+        <div class={'chip-loc' + (height >= 50 ? '' : ' hover-only')}>📍 {cleanLocation(ev.location)}</div>
+      )}
       {geom && canEdit(ev) && (
         <div class="resize-handle" onPointerDown={(e) => startEventDrag(e, ev, 'resize', geom)} />
       )}

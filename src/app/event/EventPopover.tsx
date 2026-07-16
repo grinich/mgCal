@@ -18,6 +18,15 @@ function Icon({ d, size = 15 }: { d: string; size?: number }) {
   )
 }
 
+/** Heuristic: the API doesn't flag Google Groups among attendees, but list
+ * addresses and team-ish display names are a strong signal. */
+export function isGroupAttendee(a: GAttendee): boolean {
+  const local = (a.email ?? '').split('@')[0]?.toLowerCase() ?? ''
+  if (/^(team|all|everyone|staff|employees|eng(ineering)?|members)$/.test(local)) return true
+  if (local.includes('-') && !!a.displayName) return true // e.g. developer-success@
+  return !!a.displayName && /(team|employees|group|staff|everyone|managers|engineers|success)/i.test(a.displayName)
+}
+
 const I = {
   clock: 'M8 4.5V8l2.3 1.4 M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0z',
   pin: 'M8 14.5s4.7-4.1 4.7-7.8a4.7 4.7 0 1 0-9.4 0C3.3 10.4 8 14.5 8 14.5z M8 8.2a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2z',
@@ -25,6 +34,7 @@ const I = {
   notes: 'M3 3h10 M3 6.5h10 M3 10h6.5',
   cal: 'M3 3.5h10v10H3z M3 6.5h10 M6 2v2.5 M10 2v2.5',
   repeat: 'M11 2.5l2 2-2 2 M13 4.5H5.5a3 3 0 0 0-3 3v.5 M5 13.5l-2-2 2-2 M3 11.5h7.5a3 3 0 0 0 3-3V8',
+  chevron: 'M5 6.5l3 3 3-3',
   pencil: 'M9.5 3.2l3.3 3.3-7.3 7.3-3.6.3.3-3.6 7.3-7.3z M8.3 4.4l3.3 3.3',
   trash: 'M2.5 4h11 M5.5 4V2.8a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V4 M4 4l.7 9a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9L12 4 M6.7 7v4 M9.3 7v4',
   close: 'M3.5 3.5l9 9 M12.5 3.5l-9 9',
@@ -70,6 +80,7 @@ export function EventPopover() {
 
 function Popover({ ev }: { ev: EventRow }) {
   const ref = useRef<HTMLDivElement>(null)
+  const [guestsExpanded, setGuestsExpanded] = useState(false)
   const [pos, setPos] = useState<{ left: number; top: number; visibility?: string }>({
     left: -9999, top: 0, visibility: 'hidden',
   })
@@ -104,8 +115,12 @@ function Popover({ ev }: { ev: EventRow }) {
   const cal = calendarById.value.get(ev.calendarId)
   const self = ev.attendees?.find((a) => a.self)
   const guests = (ev.attendees ?? []).filter((a) => !a.email?.endsWith('resource.calendar.google.com'))
+  const groups = guests.filter(isGroupAttendee)
+  const people = guests.filter((a) => !isGroupAttendee(a))
+  const shownPeople = guestsExpanded ? people : people.slice(0, 8)
+  const collapsible = people.length > 8
   const counts = { accepted: 0, declined: 0, tentative: 0, needsAction: 0 }
-  for (const g of guests) counts[g.responseStatus ?? 'needsAction']++
+  for (const g of people) counts[g.responseStatus ?? 'needsAction']++
   const [dateStr, timeStr] = whenLines(ev)
 
   const del = () => {
@@ -165,7 +180,11 @@ function Popover({ ev }: { ev: EventRow }) {
         <div class="peek-row">
           <span class="peek-icon"><Icon d={I.people} /></span>
           <div class="peek-guests">
-            <div class="peek-guest-summary">
+            <button
+              class="peek-guest-summary"
+              disabled={!collapsible}
+              onClick={() => setGuestsExpanded(!guestsExpanded)}
+            >
               {guests.length} guest{guests.length > 1 ? 's' : ''}
               <span class="muted">
                 {[
@@ -177,9 +196,23 @@ function Popover({ ev }: { ev: EventRow }) {
                   .filter(Boolean)
                   .join(' · ')}
               </span>
-            </div>
+              {collapsible && (
+                <span class={'peek-chevron' + (guestsExpanded ? ' open' : '')}>
+                  <Icon d={I.chevron} size={13} />
+                </span>
+              )}
+            </button>
             <div class="peek-guest-list">
-              {guests.slice(0, 8).map((a) => (
+              {groups.map((a) => (
+                <div key={a.email} class="peek-guest">
+                  <span class="peek-avatar peek-avatar-group">
+                    <Icon d={I.people} size={11} />
+                  </span>
+                  <span class="peek-guest-name">{a.displayName || a.email}</span>
+                  <span class="peek-guest-tag">group</span>
+                </div>
+              ))}
+              {shownPeople.map((a) => (
                 <div key={a.email} class="peek-guest">
                   <span class="peek-avatar" style={{ background: avatarColor(a.email ?? '') }}>
                     {initials(a)}
@@ -191,7 +224,12 @@ function Popover({ ev }: { ev: EventRow }) {
                   {a.organizer && <span class="peek-guest-tag">organizer</span>}
                 </div>
               ))}
-              {guests.length > 8 && <div class="muted peek-more">+{guests.length - 8} more</div>}
+              {collapsible && !guestsExpanded && (
+                <button class="peek-more-btn" onClick={() => setGuestsExpanded(true)}>
+                  <span class="peek-chevron"><Icon d={I.chevron} size={13} /></span>
+                  {people.length - 8} more
+                </button>
+              )}
             </div>
           </div>
         </div>

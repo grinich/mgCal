@@ -106,7 +106,7 @@
 }
 .allday-lanes { grid-column: 2 / -1; position: relative; }
 
-.grid-scroll { flex: 1; overflow-y: auto; position: relative; }
+.grid-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; }
 .grid-inner { display: grid; position: relative; }
 .gutter { position: relative; }
 .hour-label {
@@ -143,7 +143,28 @@
   transition: box-shadow 0.1s;
   box-shadow: 0 0 0 1px var(--bg); /* crisp edge where cascaded chips overlap */
 }
-.chip:hover { box-shadow: 0 0 0 1px var(--bg), 0 2px 8px rgba(0, 0, 0, 0.2); z-index: 19; }
+/* Hover expands the chip to its full content — floating over neighboring
+ * columns — so truncated titles are readable without opening the event. */
+.chip:hover {
+  width: max-content !important;
+  min-width: var(--w);
+  max-width: 340px;
+  height: max-content !important;
+  min-height: var(--h);
+  padding-right: 10px;
+  box-shadow: 0 0 0 1px var(--bg), 0 4px 16px rgba(0, 0, 0, 0.22);
+  z-index: 19;
+}
+.chip:hover .chip-title { white-space: normal; }
+.chip:hover .chip-time-end { display: inline; }
+.chip-time-end { display: none; }
+.chip.compact .chip-time { display: none; }
+.chip.compact:hover .chip-time { display: block; }
+.chip.dragging:hover {
+  /* keep geometry stable while dragging */
+  width: var(--w) !important;
+  height: var(--h) !important;
+}
 .chip.selected { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 18; }
 :root[data-theme='dark'] .chip { background: color-mix(in srgb, var(--c) 32%, var(--bg)); }
 :root[data-theme='dark'] .chip-title { color: color-mix(in srgb, var(--c) 30%, var(--text)); }
@@ -153,6 +174,13 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .chip-time { font-size: 11px; color: var(--text-muted); }
+.chip-loc {
+  font-size: 11px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chip-loc.hover-only { display: none; }
+.chip:hover .chip-loc.hover-only { display: block; }
+.chip:hover .chip-loc { white-space: normal; }
 .chip.declined .chip-title { text-decoration: line-through; opacity: 0.6; }
 .chip.pending::after, .lane-chip.pending::after {
   content: ''; position: absolute; top: 3px; right: 3px;
@@ -318,8 +346,26 @@
 .peek-meet:hover { filter: brightness(1.08); }
 
 .peek-guests { min-width: 0; flex: 1; }
-.peek-guest-summary { font-weight: 600; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.peek-guest-summary {
+  font: inherit; font-weight: 600; color: var(--text);
+  background: none; border: none; padding: 0; text-align: left; width: 100%;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+}
+.peek-guest-summary:not(:disabled) { cursor: pointer; }
 .peek-guest-summary .muted { font-weight: 400; font-size: 12px; }
+.peek-chevron {
+  display: inline-flex; color: var(--text-muted);
+  transition: transform 0.15s ease; margin-left: auto;
+}
+.peek-chevron.open { transform: rotate(180deg); }
+.peek-avatar-group { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border-strong); }
+.peek-more-btn {
+  font: inherit; font-size: 12px; color: var(--text-muted);
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; text-align: left;
+}
+.peek-more-btn:hover { color: var(--text); }
+.peek-more-btn .peek-chevron { margin-left: 0; }
 .peek-guest-list { margin-top: 6px; display: flex; flex-direction: column; gap: 5px; }
 .peek-guest { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .peek-avatar {
