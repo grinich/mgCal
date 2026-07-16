@@ -1,6 +1,7 @@
 import type { EventRow } from '../../data/types'
 import { anchor, range, selectedKey, setAnchor, setView, weekStart } from '../state/signals'
 import { DAY, DOW, fmtTimeShort, isSameDay } from '../time'
+import { textOnColor } from '../colors'
 import { chipColor, eventKey, isDeclined, toggleSelect } from './EventChip'
 
 const MAX_CHIPS = 4
@@ -62,7 +63,7 @@ export function MonthView({ events }: { events: EventRow[] }) {
                   (selectedKey.value === eventKey(ev) ? ' selected' : '') +
                   (isDeclined(ev) ? ' declined' : '')
                 }
-                style={{ '--c': chipColor(ev) }}
+                style={{ '--c': chipColor(ev), '--ct': textOnColor(chipColor(ev)) }}
                 onClick={(e) => {
                   e.stopPropagation()
                   toggleSelect(ev, e.currentTarget as HTMLElement)

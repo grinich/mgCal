@@ -1,5 +1,5 @@
 import type { EventRow } from '../../data/types'
-import { eventColorHex } from '../colors'
+import { eventColorHex, textOnColor } from '../colors'
 import { calendarById, openEdit, selectedAnchor, selectedKey } from '../state/signals'
 import { fmtTime } from '../time'
 import { drag, startEventDrag, wasDragged, type GridGeom } from './drag'
@@ -77,6 +77,10 @@ export function EventChip({
   const compact = height < 32
   const d = drag.value
   const beingDragged = d?.kind === 'event' && eventKey(d.ev) === key
+  const declined = isDeclined(ev)
+  const self = ev.attendees?.find((a) => a.self)
+  const needsAction = !declined && self?.responseStatus === 'needsAction'
+  const tentative = !declined && self?.responseStatus === 'tentative'
 
   return (
     <div
@@ -84,7 +88,9 @@ export function EventChip({
         'chip' +
         (compact ? ' compact' : '') +
         (selected ? ' selected' : '') +
-        (isDeclined(ev) ? ' declined' : '') +
+        (declined ? ' declined' : '') +
+        (needsAction ? ' needs-action' : '') +
+        (tentative ? ' tentative' : '') +
         (ev.pending ? ' pending' : '') +
         (beingDragged ? ' dragging' : '')
       }
@@ -95,6 +101,7 @@ export function EventChip({
         width: `calc(${widthPct}% - 3px)`,
         '--z': z,
         '--c': c,
+        '--ct': textOnColor(c),
       }}
       onPointerDown={(e) => geom && canEdit(ev) && startEventDrag(e, ev, 'move', geom)}
       onClick={(e) => {
