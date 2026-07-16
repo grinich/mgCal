@@ -1,0 +1,27 @@
+{
+  "name": "gcal",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "vite build && vite build -c vite.sw.config.ts",
+    "watch": "vite build --watch & vite build -c vite.sw.config.ts --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@preact/signals": "^2.9.4",
+    "idb": "^8.0.3",
+    "preact": "^10.29.7"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.5",
+    "@types/chrome": "^0.2.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5"
+  }
+}

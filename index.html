@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Calendar</title>
+<script>
+  // Theme must resolve before first style calculation — no flash.
+  (function () {
+    var t = localStorage.getItem('theme') || 'system';
+    var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  })();
+</script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f7f7f7;
+    --border: #ebebeb;
+    --border-strong: #dcdcdc;
+    --text: #1f1f1f;
+    --text-muted: #9a9a9a;
+    --text-faint: #c4c4c4;
+    --accent: #4f6bed;
+    --accent-soft: rgba(79, 107, 237, 0.12);
+    --now-line: #ea4335;
+    --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+    --gutter: 52px;
+    --header-h: 48px;
+    --allday-h: 28px;
+    --hour-h: 56px;
+  }
+  :root[data-theme='dark'] {
+    --bg: #191919;
+    --surface: #202020;
+    --border: #2a2a2a;
+    --border-strong: #383838;
+    --text: #e6e6e6;
+    --text-muted: #808080;
+    --text-faint: #4a4a4a;
+    --accent: #6d84f5;
+    --accent-soft: rgba(109, 132, 245, 0.16);
+    --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  #app { height: 100%; display: flex; flex-direction: column; }
+
+  /* --- Static skeleton (replaced by hydration, layout-identical) --- */
+  .sk-header {
+    height: var(--header-h);
+    flex: none;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+  }
+  .sk-title { font-size: 16px; font-weight: 600; letter-spacing: -0.2px; }
+  .sk-days {
+    flex: none;
+    display: grid;
+    grid-template-columns: var(--gutter) repeat(7, 1fr);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 0 6px;
+  }
+  .sk-day { text-align: center; }
+  .sk-day .dow { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); }
+  .sk-day .dom { font-size: 18px; font-weight: 400; margin-top: 1px; color: var(--text); }
+  .sk-day.today .dom {
+    background: var(--accent); color: #fff; border-radius: 50%;
+    width: 26px; height: 26px; line-height: 26px; display: inline-block;
+  }
+  .sk-grid { flex: 1; overflow-y: auto; position: relative; }
+  .sk-grid-inner {
+    display: grid;
+    grid-template-columns: var(--gutter) repeat(7, 1fr);
+    height: calc(var(--hour-h) * 24);
+    position: relative;
+  }
+  .sk-gutter { position: relative; }
+  .sk-hour {
+    position: absolute; right: 8px; transform: translateY(-50%);
+    font-size: 10px; color: var(--text-muted);
+  }
+  .sk-col { border-left: 1px solid var(--border); position: relative; }
+  .sk-lines {
+    position: absolute; inset: 0 0 0 var(--gutter); pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      var(--border) 0, var(--border) 1px,
+      transparent 1px, transparent var(--hour-h)
+    );
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="sk-header"><span class="sk-title" id="sk-title"></span></div>
+  <div class="sk-days" id="sk-days"><div></div></div>
+  <div class="sk-grid" id="sk-grid">
+    <div class="sk-grid-inner">
+      <div class="sk-gutter" id="sk-gutter"></div>
+      <div class="sk-col"></div><div class="sk-col"></div><div class="sk-col"></div>
+      <div class="sk-col"></div><div class="sk-col"></div><div class="sk-col"></div><div class="sk-col"></div>
+      <div class="sk-lines"></div>
+    </div>
+  </div>
+</div>
+<script>
+  // Paint the current week's skeleton synchronously (real dates, hour labels,
+  // scrolled to ~8am) so the first frame is already "the calendar".
+  (function () {
+    var now = new Date();
+    var view = localStorage.getItem('view') || 'week';
+    var anchor = new Date(localStorage.getItem('anchor') || now);
+    if (isNaN(anchor)) anchor = now;
+    var start = new Date(anchor);
+    start.setDate(anchor.getDate() - anchor.getDay()); // week starts Sunday
+    var days = document.getElementById('sk-days');
+    var names = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(start); d.setDate(start.getDate() + i);
+      var el = document.createElement('div');
+      el.className = 'sk-day' + (d.toDateString() === now.toDateString() ? ' today' : '');
+      el.innerHTML = '<div class="dow">' + names[i] + '</div><div class="dom">' + d.getDate() + '</div>';
+      days.appendChild(el);
+    }
+    document.getElementById('sk-title').textContent =
+      anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    var gutter = document.getElementById('sk-gutter');
+    for (var h = 1; h < 24; h++) {
+      var lab = document.createElement('div');
+      lab.className = 'sk-hour';
+      lab.style.top = 'calc(var(--hour-h) * ' + h + ')';
+      lab.textContent = (h % 12 || 12) + (h < 12 ? ' AM' : ' PM');
+      gutter.appendChild(lab);
+    }
+    var grid = document.getElementById('sk-grid');
+    grid.scrollTop = 8 * 56 - 8; // ~8am
+  })();
+</script>
+<script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
