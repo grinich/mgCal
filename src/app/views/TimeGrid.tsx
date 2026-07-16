@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from 'preact/hooks'
 import type { EventRow } from '../../data/types'
-import { nowMs, openEdit, overflowList, selectedKey } from '../state/signals'
+import { calendarById, nowMs, openEdit, overflowList, selectedKey } from '../state/signals'
 import { DAY, DOW, defaultScrollTop, fmtTime, fmtTimeShort, HOUR, HOUR_H, isSameDay } from '../time'
 import { layoutDay, layoutLanes, splitAllDay } from './layout'
 import { chipColor, EventChip, eventKey, isDeclined, toggleSelect } from './EventChip'
@@ -98,6 +98,15 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
   )
 }
 
+/** Contended visible columns go to my own calendars first; shared-calendar
+ * events and things I've declined are first into the +N overflow. */
+function priorityRank(ev: EventRow): number {
+  const cal = calendarById.value.get(ev.calendarId)
+  let r = cal?.accessRole === 'owner' ? 0 : 1
+  if (isDeclined(ev)) r += 2
+  return r
+}
+
 function DayColumn({
   day,
   events,
@@ -114,7 +123,7 @@ function DayColumn({
   const now = nowMs.value
   const isToday = isSameDay(day, new Date(now))
   const dayEvents = events.filter((e) => e.startMs < dayEndMs && e.endMs > dayStartMs)
-  const { chips, overflows } = layoutDay(dayEvents, dayStartMs, maxCols)
+  const { chips, overflows } = layoutDay(dayEvents, dayStartMs, maxCols, priorityRank)
 
   const d = drag.value
   let ghost: { top: number; height: number; label: string; color?: string } | null = null

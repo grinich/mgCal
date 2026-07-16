@@ -26,8 +26,15 @@ const OVERFLOW_RAIL_PCT = 11 // right rail reserved for the +N pill
 /** Timed events for one day column. Overlap clusters lay out as a Google-style
  * cascade (chips expand ~70% into the next slot, later columns stack on top),
  * capped at `maxCols` visible columns — anything denser collapses into a "+N"
- * pill so the visible chips stay readable. */
-export function layoutDay(events: EventRow[], dayStartMs: number, maxCols = 3): DayLayout {
+ * pill so the visible chips stay readable. `rank` decides who wins a visible
+ * column when a cluster is contended (lower rank = higher priority); overflow
+ * always takes the highest-ranked (least important) events first. */
+export function layoutDay(
+  events: EventRow[],
+  dayStartMs: number,
+  maxCols = 3,
+  rank: (ev: EventRow) => number = () => 0,
+): DayLayout {
   const dayEndMs = dayStartMs + DAY
   const items = events
     .map((ev) => {
@@ -46,6 +53,18 @@ export function layoutDay(events: EventRow[], dayStartMs: number, maxCols = 3): 
 
   const flush = () => {
     if (!cluster.length) return
+    // Columns are handed out in priority order, so when the cluster is denser
+    // than maxCols it's the low-priority events that spill into the +N pill.
+    const byPriority = [...cluster].sort(
+      (a, b) => rank(a.ev) - rank(b.ev) || a.start - b.start || b.end - a.end,
+    )
+    const colIntervals: { start: number; end: number }[][] = []
+    for (const c of byPriority) {
+      let col = 0
+      while (colIntervals[col]?.some((iv) => iv.start < c.end && iv.end > c.start)) col++
+      ;(colIntervals[col] ??= []).push({ start: c.start, end: c.end })
+      c.col = col
+    }
     const visible = cluster.filter((c) => c.col < maxCols)
     const hidden = cluster.filter((c) => c.col >= maxCols)
     const cols = Math.max(...visible.map((c) => c.col)) + 1
@@ -90,12 +109,7 @@ export function layoutDay(events: EventRow[], dayStartMs: number, maxCols = 3): 
 
   for (const it of items) {
     if (it.start >= clusterEnd) flush()
-    // greedy: first column whose last event has ended
-    const colEnds: number[] = []
-    for (const c of cluster) colEnds[c.col] = Math.max(colEnds[c.col] ?? 0, c.end)
-    let col = 0
-    while ((colEnds[col] ?? 0) > it.start) col++
-    cluster.push({ ...it, col })
+    cluster.push({ ...it, col: 0 }) // real column assigned at flush, by priority
     clusterEnd = Math.max(clusterEnd, it.end)
   }
   flush()
