@@ -1,22 +1,29 @@
 import { useLayoutEffect, useRef } from 'preact/hooks'
 import type { EventRow } from '../../data/types'
-import { nowMs } from '../state/signals'
-import { DAY, DOW, defaultScrollTop, fmtTime, HOUR, HOUR_H, isSameDay } from '../time'
+import { nowMs, openEdit, selectedKey } from '../state/signals'
+import { DAY, DOW, defaultScrollTop, fmtTime, fmtTimeShort, HOUR, HOUR_H, isSameDay } from '../time'
 import { layoutDay, layoutLanes, splitAllDay } from './layout'
-import { chipColor, EventChip, eventKey, isDeclined } from './EventChip'
-import { selectedKey } from '../state/signals'
+import { chipColor, EventChip, eventKey, isDeclined, toggleSelect } from './EventChip'
+import { drag, makeGeom, startCreateDrag, type GridGeom } from './drag'
+
+const GUTTER_PX = 52
 
 /** Shared day/week time grid: header row, all-day lane row, scrollable hour grid. */
 export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] }) {
   const { allDay, timed } = splitAllDay(events)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const innerRef = useRef<HTMLDivElement>(null)
   const today = new Date(nowMs.value)
   const todayVisible = days.some((d) => isSameDay(d, today))
 
   useLayoutEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = defaultScrollTop(todayVisible)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days[0]?.getTime()])
+  }, [days[0]?.getTime(), days.length])
+
+  const geom: GridGeom = {
+    timeAt: (e) => makeGeom(innerRef.current!, days, GUTTER_PX).timeAt(e),
+  }
 
   const rowStartMs = days[0]!.getTime()
   const lanes = layoutLanes(allDay, rowStartMs, days.length)
@@ -56,8 +63,11 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
                 }}
                 onClick={(e) => {
                   e.stopPropagation()
-                  const k = eventKey(l.ev)
-                  selectedKey.value = selectedKey.value === k ? null : k
+                  toggleSelect(l.ev)
+                }}
+                onDblClick={(e) => {
+                  e.stopPropagation()
+                  openEdit(l.ev)
                 }}
               >
                 {l.clipsLeft ? '… ' : ''}
@@ -70,7 +80,7 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
       )}
 
       <div class="grid-scroll" ref={scrollRef}>
-        <div class="grid-inner" style={{ gridTemplateColumns: cols, height: `${24 * HOUR_H}px` }}>
+        <div class="grid-inner" ref={innerRef} style={{ gridTemplateColumns: cols, height: `${24 * HOUR_H}px` }}>
           <div class="gutter">
             {Array.from({ length: 23 }, (_, i) => (
               <div key={i} class="hour-label" style={{ top: `${(i + 1) * HOUR_H}px` }}>
@@ -79,7 +89,7 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
             ))}
           </div>
           {days.map((d) => (
-            <DayColumn key={d.getTime()} day={d} events={timed} />
+            <DayColumn key={d.getTime()} day={d} events={timed} geom={geom} />
           ))}
           <div class="hour-lines" />
         </div>
@@ -88,7 +98,7 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
   )
 }
 
-function DayColumn({ day, events }: { day: Date; events: EventRow[] }) {
+function DayColumn({ day, events, geom }: { day: Date; events: EventRow[]; geom: GridGeom }) {
   const dayStartMs = day.getTime()
   const dayEndMs = dayStartMs + DAY
   const now = nowMs.value
@@ -96,11 +106,43 @@ function DayColumn({ day, events }: { day: Date; events: EventRow[] }) {
   const dayEvents = events.filter((e) => e.startMs < dayEndMs && e.endMs > dayStartMs)
   const positioned = layoutDay(dayEvents, dayStartMs)
 
+  const d = drag.value
+  let ghost: { top: number; height: number; label: string; color?: string } | null = null
+  if (d && d.startMs < dayEndMs && d.endMs > dayStartMs) {
+    const s = Math.max(d.startMs, dayStartMs)
+    const e = Math.min(d.endMs, dayEndMs)
+    ghost = {
+      top: ((s - dayStartMs) / HOUR) * HOUR_H,
+      height: Math.max(((e - s) / HOUR) * HOUR_H - 2, 12),
+      label:
+        d.kind === 'event'
+          ? `${d.ev.summary || '(no title)'} · ${fmtTimeShort(d.startMs)}–${fmtTime(d.endMs)}`
+          : `${fmtTimeShort(d.startMs)} – ${fmtTime(d.endMs)}`,
+      color: d.kind === 'event' ? chipColor(d.ev) : undefined,
+    }
+  }
+
   return (
-    <div class="day-col" onClick={() => (selectedKey.value = null)}>
+    <div class="day-col" onPointerDown={(e) => e.target === e.currentTarget && startCreateDrag(e, geom)}>
       {positioned.map((p) => (
-        <EventChip key={eventKey(p.ev)} ev={p.ev} top={p.top} height={p.height} col={p.col} cols={p.cols} />
+        <EventChip
+          key={eventKey(p.ev)}
+          ev={p.ev}
+          top={p.top}
+          height={p.height}
+          col={p.col}
+          cols={p.cols}
+          geom={geom}
+        />
       ))}
+      {ghost && (
+        <div
+          class="ghost-chip"
+          style={{ top: `${ghost.top}px`, height: `${ghost.height}px`, '--c': ghost.color ?? 'var(--accent)' }}
+        >
+          {ghost.label}
+        </div>
+      )}
       {isToday && (
         <div class="now-line" style={{ top: `${((now - dayStartMs) / HOUR) * HOUR_H}px` }}>
           <div class="now-dot" />

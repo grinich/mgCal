@@ -1,4 +1,17 @@
-import { goToday, helpOpen, navigate, selectedKey, settingsOpen, setView, toggleSidebar } from './state/signals'
+import {
+  editor,
+  goToday,
+  helpOpen,
+  navigate,
+  openCreate,
+  openEdit,
+  selectedEvent,
+  selectedKey,
+  settingsOpen,
+  setView,
+  toggleSidebar,
+} from './state/signals'
+import { deleteEvent } from '../data/outbox'
 
 type Handler = () => void
 
@@ -19,8 +32,23 @@ export function initKeyboard(): void {
   bindKey('m', () => setView('month'))
   bindKey('s', toggleSidebar)
   bindKey('?', () => (helpOpen.value = !helpOpen.value))
+  bindKey('c', () => openCreate())
+  bindKey('e', () => {
+    const ev = selectedEvent()
+    if (ev) openEdit(ev)
+  })
+  const deleteSelected = () => {
+    const ev = selectedEvent()
+    if (ev) {
+      void deleteEvent(ev)
+      selectedKey.value = null
+    }
+  }
+  bindKey('Backspace', deleteSelected)
+  bindKey('Delete', deleteSelected)
   bindKey('Escape', () => {
-    if (helpOpen.value) helpOpen.value = false
+    if (editor.value) editor.value = null
+    else if (helpOpen.value) helpOpen.value = false
     else if (settingsOpen.value) settingsOpen.value = false
     else selectedKey.value = null
   })

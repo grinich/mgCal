@@ -80,7 +80,7 @@ export async function eventsInRange(startMs: number, endMs: number): Promise<Eve
   // Back-pad catches long multi-day events whose start precedes the range.
   const PAD = 35 * 24 * 3600 * 1000
   const rows = await d.getAllFromIndex('events', 'byStart', IDBKeyRange.bound(startMs - PAD, endMs, false, true))
-  return rows.filter((r) => r.endMs > startMs && r.status !== 'cancelled')
+  return rows.filter((r) => r.endMs > startMs && r.status !== 'cancelled' && r.pending !== 'delete')
 }
 
 export async function getSetting<T>(key: string): Promise<T | undefined> {

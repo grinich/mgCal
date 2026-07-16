@@ -2,6 +2,7 @@
 // freshly-woken service worker re-attaches them before events dispatch.
 import { openApp } from './open-app'
 import { syncAll } from './sync'
+import { flushOutbox } from './flush'
 
 chrome.runtime.onInstalled.addListener(() => {
   void ensureAlarms()
@@ -22,16 +23,18 @@ chrome.commands.onCommand.addListener((command) => {
 })
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'sync') void syncAll('full')
+  if (alarm.name === 'sync') void flushOutbox().then(() => syncAll('full'))
 })
 
 chrome.runtime.onMessage.addListener((msg: { type?: string; full?: boolean }, _sender, sendResponse) => {
   if (msg?.type === 'kick') {
-    // Keep the message channel open so the worker stays alive for the pass.
-    syncAll(msg.full ? 'full' : 'fast').then(
-      () => sendResponse({ ok: true }),
-      (e) => sendResponse({ ok: false, error: String(e) }),
-    )
+    // Flush local edits first, then pull. Channel stays open to keep the worker alive.
+    flushOutbox()
+      .then(() => syncAll(msg.full ? 'full' : 'fast'))
+      .then(
+        () => sendResponse({ ok: true }),
+        (e) => sendResponse({ ok: false, error: String(e) }),
+      )
     return true
   }
   return false

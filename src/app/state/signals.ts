@@ -1,7 +1,7 @@
 import { computed, effect, signal } from '@preact/signals'
 import { db, eventsInRange } from '../../data/db'
 import type { CalendarRow, EventRow } from '../../data/types'
-import { addDays, addMonths, DAY, startOfDay, startOfWeek } from '../time'
+import { addDays, addMonths, DAY, HOUR, isSameDay, MIN, startOfDay, startOfWeek } from '../time'
 
 export type View = 'day' | 'week' | 'month'
 
@@ -27,6 +27,69 @@ export const weekStart = signal<0 | 1>(localStorage.getItem('weekStart') === '1'
 export function setWeekStart(n: 0 | 1): void {
   weekStart.value = n
   localStorage.setItem('weekStart', String(n))
+}
+
+// ---------- event editor ----------
+
+export interface EditorState {
+  mode: 'create' | 'edit'
+  original?: EventRow
+  calendarId: string
+  summary: string
+  allDay: boolean
+  startMs: number
+  endMs: number
+  location: string
+  description: string
+}
+
+export const editor = signal<EditorState | null>(null)
+
+export function writableCalendars(): CalendarRow[] {
+  return calendars.value.filter((c) => c.accessRole === 'owner' || c.accessRole === 'writer')
+}
+
+export function openCreate(startMs?: number, endMs?: number, allDay = false): void {
+  const writable = writableCalendars()
+  const cal = writable.find((c) => c.primary) ?? writable[0]
+  if (!cal) return
+  let s = startMs
+  if (s == null) {
+    const a = anchor.value
+    const now = new Date()
+    const base = isSameDay(a, now) ? now : new Date(a.getFullYear(), a.getMonth(), a.getDate(), 9)
+    s = Math.ceil(base.getTime() / (30 * MIN)) * (30 * MIN)
+  }
+  editor.value = {
+    mode: 'create',
+    calendarId: cal.id,
+    summary: '',
+    allDay,
+    startMs: s,
+    endMs: endMs ?? s + (allDay ? DAY : HOUR),
+    location: '',
+    description: '',
+  }
+}
+
+export function openEdit(ev: EventRow): void {
+  editor.value = {
+    mode: 'edit',
+    original: ev,
+    calendarId: ev.calendarId,
+    summary: ev.summary ?? '',
+    allDay: ev.allDay,
+    startMs: ev.startMs,
+    endMs: ev.endMs,
+    location: ev.location ?? '',
+    description: ev.description ?? '',
+  }
+}
+
+export function selectedEvent(): EventRow | undefined {
+  const key = selectedKey.value
+  if (!key) return undefined
+  return visibleEvents.value.find((e) => `${e.calendarId}|${e.id}` === key)
 }
 
 export interface Range {
@@ -121,10 +184,15 @@ export function initApp(): void {
   })
 
   chrome.runtime.onMessage.addListener((msg: { type?: string; calendarIds?: string[] }) => {
+    if (msg?.type === 'write-conflict') {
+      void import('./conflicts').then((m) => m.loadConflicts())
+      return
+    }
     if (msg?.type !== 'db-updated') return
     void refreshEvents()
     if (msg.calendarIds?.includes('$calendars')) void refreshCalendars()
   })
+  void import('./conflicts').then((m) => m.loadConflicts())
 
   void chrome.storage.local.get('authNeeded').then((v) => (authNeeded.value = !!v.authNeeded))
   chrome.storage.onChanged.addListener((changes) => {

@@ -7,6 +7,8 @@ import { addDays, startOfDay, startOfWeek } from './time'
 import { connectGoogle } from './connect'
 import { isOAuthConfigured } from '../google/auth'
 import { HelpOverlay, SettingsPanel } from './SettingsPanel'
+import { EventEditor } from './event/EventEditor'
+import { Toasts } from './Toasts'
 
 export function App() {
   const v = view.value
@@ -32,6 +34,8 @@ export function App() {
       </div>
       <SettingsPanel />
       <HelpOverlay open={helpOpen.value} onClose={() => (helpOpen.value = false)} />
+      <EventEditor />
+      <Toasts />
     </div>
   )
 }
