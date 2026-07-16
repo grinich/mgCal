@@ -7,6 +7,7 @@ import {
   openCreate,
   openEdit,
   scopeDialog,
+  searchOpen,
   selectedEvent,
   selectedKey,
   settingsOpen,
@@ -34,6 +35,7 @@ export function initKeyboard(): void {
   bindKey('m', () => setView('month'))
   bindKey('s', toggleSidebar)
   bindKey('?', () => (helpOpen.value = !helpOpen.value))
+  bindKey('/', () => (searchOpen.value = true))
   bindKey('c', () => openCreate())
   bindKey('e', () => {
     const ev = selectedEvent()
@@ -53,6 +55,7 @@ export function initKeyboard(): void {
   bindKey('Escape', () => {
     if (scopeDialog.value) scopeDialog.value.resolve(null)
     else if (editor.value) editor.value = null
+    else if (searchOpen.value) searchOpen.value = false
     else if (helpOpen.value) helpOpen.value = false
     else if (settingsOpen.value) settingsOpen.value = false
     else selectedKey.value = null

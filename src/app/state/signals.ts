@@ -22,6 +22,7 @@ export const sidebarOpen = signal<boolean>(localStorage.getItem('sidebar') === '
 export const selectedKey = signal<string | null>(null) // `${calendarId}|${id}`
 export const helpOpen = signal<boolean>(false)
 export const settingsOpen = signal<boolean>(false)
+export const searchOpen = signal<boolean>(false)
 export const weekStart = signal<0 | 1>(localStorage.getItem('weekStart') === '1' ? 1 : 0)
 
 export function setWeekStart(n: 0 | 1): void {

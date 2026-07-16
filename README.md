@@ -2,6 +2,8 @@
 
 A local-first Google Calendar replacement that runs as a Chrome extension. Your new tab page becomes a calendar that paints instantly (<100ms) from a local IndexedDB cache, while a background service worker keeps it in sync with Google Calendar — 1-second incremental polling while you're looking at it, once a minute in the background. All edits apply instantly and sync back to the cloud through a persistent outbox.
 
+**Features**: week/day/month views · create/edit/delete with drag-move and drag-resize · guests with autocomplete + Google Meet · RSVP · recurring events (this / this-and-following / all, with repeat presets) · offline edits with conflict handling · event reminders via Chrome notifications (with a Join Meet button) · instant local search (`/`) · light/dark theme · 12 months back / 12 months ahead cached locally.
+
 ## Setup
 
 ### 1. Build and load the extension

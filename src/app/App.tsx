@@ -10,6 +10,7 @@ import { HelpOverlay, SettingsPanel } from './SettingsPanel'
 import { EventEditor } from './event/EventEditor'
 import { EventPopover } from './event/EventPopover'
 import { RecurrenceScopeDialog } from './event/RecurrenceScopeDialog'
+import { SearchOverlay } from './search/SearchOverlay'
 import { Toasts } from './Toasts'
 
 export function App() {
@@ -39,6 +40,7 @@ export function App() {
       <EventPopover />
       <EventEditor />
       <RecurrenceScopeDialog />
+      <SearchOverlay />
       <Toasts />
     </div>
   )

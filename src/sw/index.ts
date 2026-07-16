@@ -3,15 +3,16 @@
 import { openApp } from './open-app'
 import { syncAll } from './sync'
 import { flushOutbox } from './flush'
+import { onNotificationButton, onNotificationClicked, onReminderAlarm, scheduleReminders } from './reminders'
 
 chrome.runtime.onInstalled.addListener(() => {
   void ensureAlarms()
-  void syncAll('full')
+  void syncAll('full').then(() => scheduleReminders(true))
 })
 
 chrome.runtime.onStartup.addListener(() => {
   void ensureAlarms()
-  void syncAll('full')
+  void syncAll('full').then(() => scheduleReminders(true))
 })
 
 chrome.action.onClicked.addListener(() => {
@@ -23,7 +24,21 @@ chrome.commands.onCommand.addListener((command) => {
 })
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'sync') void flushOutbox().then(() => syncAll('full'))
+  if (alarm.name === 'sync') {
+    void flushOutbox()
+      .then(() => syncAll('full'))
+      .then(() => scheduleReminders(true))
+  } else if (alarm.name.startsWith('rem|')) {
+    void onReminderAlarm(alarm.name)
+  }
+})
+
+chrome.notifications.onClicked.addListener((id) => {
+  void onNotificationClicked(id)
+})
+
+chrome.notifications.onButtonClicked.addListener((id, idx) => {
+  void onNotificationButton(id, idx)
 })
 
 chrome.runtime.onMessage.addListener((msg: { type?: string; full?: boolean }, _sender, sendResponse) => {
@@ -31,6 +46,7 @@ chrome.runtime.onMessage.addListener((msg: { type?: string; full?: boolean }, _s
     // Flush local edits first, then pull. Channel stays open to keep the worker alive.
     flushOutbox()
       .then(() => syncAll(msg.full ? 'full' : 'fast'))
+      .then(() => scheduleReminders()) // internally throttled to every 30s
       .then(
         () => sendResponse({ ok: true }),
         (e) => sendResponse({ ok: false, error: String(e) }),
