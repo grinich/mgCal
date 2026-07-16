@@ -49,7 +49,8 @@ function installChromeShim(): void {
   g.chrome = {
     runtime: {
       id: 'dev-shim',
-      sendMessage: () => Promise.resolve({ ok: true }),
+      sendMessage: (msg: { type?: string }) =>
+        Promise.resolve(msg?.type === 'kick' ? { ok: true } : { ok: false, error: 'not available in dev' }),
       onMessage: { addListener: () => {}, removeListener: () => {} },
       getManifest: () => ({
         manifest_version: 3,

@@ -78,9 +78,27 @@ export function EventPopover() {
   return <Popover key={`${ev.calendarId}|${ev.id}`} ev={ev} />
 }
 
+type GroupState = string[] | 'loading' | 'error' | undefined
+
 function Popover({ ev }: { ev: EventRow }) {
   const ref = useRef<HTMLDivElement>(null)
   const [guestsExpanded, setGuestsExpanded] = useState(false)
+  const [groupMembers, setGroupMembers] = useState<Record<string, GroupState>>({})
+
+  function toggleGroup(email: string): void {
+    const cur = groupMembers[email]
+    if (cur && cur !== 'error') {
+      setGroupMembers({ ...groupMembers, [email]: undefined })
+      return
+    }
+    setGroupMembers({ ...groupMembers, [email]: 'loading' })
+    chrome.runtime
+      .sendMessage({ type: 'expandGroup', email })
+      .then((r: { ok?: boolean; members?: string[] }) =>
+        setGroupMembers((m) => ({ ...m, [email]: r?.ok && Array.isArray(r.members) ? r.members : 'error' })),
+      )
+      .catch(() => setGroupMembers((m) => ({ ...m, [email]: 'error' })))
+  }
   const [pos, setPos] = useState<{ left: number; top: number; visibility?: string }>({
     left: -9999, top: 0, visibility: 'hidden',
   })
@@ -203,15 +221,41 @@ function Popover({ ev }: { ev: EventRow }) {
               )}
             </button>
             <div class="peek-guest-list">
-              {groups.map((a) => (
-                <div key={a.email} class="peek-guest">
-                  <span class="peek-avatar peek-avatar-group">
-                    <Icon d={I.people} size={11} />
-                  </span>
-                  <span class="peek-guest-name">{a.displayName || a.email}</span>
-                  <span class="peek-guest-tag">group</span>
-                </div>
-              ))}
+              {groups.map((a) => {
+                const state = groupMembers[a.email]
+                return (
+                  <div key={a.email}>
+                    <button class="peek-guest peek-guest-btn" onClick={() => toggleGroup(a.email)}>
+                      <span class="peek-avatar peek-avatar-group">
+                        <Icon d={I.people} size={11} />
+                      </span>
+                      <span class="peek-guest-name">{a.displayName || a.email}</span>
+                      <span class="peek-guest-tag">group</span>
+                      <span class={'peek-chevron' + (Array.isArray(state) ? ' open' : '')}>
+                        <Icon d={I.chevron} size={12} />
+                      </span>
+                    </button>
+                    {state === 'loading' && <div class="peek-member muted">Loading members…</div>}
+                    {state === 'error' && <div class="peek-member muted">Couldn't load members</div>}
+                    {Array.isArray(state) && (
+                      <div class="peek-members">
+                        {state.length ? (
+                          state.map((m) => (
+                            <div key={m} class="peek-member">
+                              <span class="peek-avatar peek-avatar-sm" style={{ background: avatarColor(m) }}>
+                                {initials({ email: m })}
+                              </span>
+                              {m}
+                            </div>
+                          ))
+                        ) : (
+                          <div class="peek-member muted">No visible members</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
               {shownPeople.map((a) => (
                 <div key={a.email} class="peek-guest">
                   <span class="peek-avatar" style={{ background: avatarColor(a.email ?? '') }}>

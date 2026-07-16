@@ -93,8 +93,6 @@ export function EventChip({
         height: `${height}px`,
         left: `calc(${leftPct}% + 1px)`,
         width: `calc(${widthPct}% - 3px)`,
-        '--h': `${height}px`,
-        '--w': `calc(${widthPct}% - 3px)`,
         '--z': z,
         '--c': c,
       }}
@@ -109,13 +107,17 @@ export function EventChip({
       }}
     >
       <div class="chip-title">{ev.summary || '(no title)'}</div>
-      <div class="chip-time">
-        {fmtTime(ev.startMs)}
-        <span class="chip-time-end"> – {fmtTime(ev.endMs)}</span>
+      <div class="chip-time">{fmtTime(ev.startMs)}</div>
+      {ev.location && height >= 50 && <div class="chip-loc">📍 {cleanLocation(ev.location)}</div>}
+      {/* Hover card: expands below the title "tab", so neighboring tabs on the
+          same row stay reachable as the cursor travels across. */}
+      <div class="chip-card">
+        <div class="chip-card-title">{ev.summary || '(no title)'}</div>
+        <div class="chip-time">
+          {fmtTime(ev.startMs)} – {fmtTime(ev.endMs)}
+        </div>
+        {ev.location && <div class="chip-card-loc">📍 {cleanLocation(ev.location)}</div>}
       </div>
-      {ev.location && (
-        <div class={'chip-loc' + (height >= 50 ? '' : ' hover-only')}>📍 {cleanLocation(ev.location)}</div>
-      )}
       {geom && canEdit(ev) && (
         <div class="resize-handle" onPointerDown={(e) => startEventDrag(e, ev, 'resize', geom)} />
       )}

@@ -4,6 +4,7 @@ import { openApp } from './open-app'
 import { syncAll } from './sync'
 import { flushOutbox } from './flush'
 import { onNotificationButton, onNotificationClicked, onReminderAlarm, scheduleReminders } from './reminders'
+import { expandGroup } from './groups'
 
 chrome.runtime.onInstalled.addListener(() => {
   void ensureAlarms()
@@ -41,20 +42,29 @@ chrome.notifications.onButtonClicked.addListener((id, idx) => {
   void onNotificationButton(id, idx)
 })
 
-chrome.runtime.onMessage.addListener((msg: { type?: string; full?: boolean }, _sender, sendResponse) => {
-  if (msg?.type === 'kick') {
-    // Flush local edits first, then pull. Channel stays open to keep the worker alive.
-    flushOutbox()
-      .then(() => syncAll(msg.full ? 'full' : 'fast'))
-      .then(() => scheduleReminders()) // internally throttled to every 30s
-      .then(
-        () => sendResponse({ ok: true }),
+chrome.runtime.onMessage.addListener(
+  (msg: { type?: string; full?: boolean; email?: string }, _sender, sendResponse) => {
+    if (msg?.type === 'expandGroup' && typeof msg.email === 'string') {
+      expandGroup(msg.email).then(
+        (members) => sendResponse({ ok: true, members }),
         (e) => sendResponse({ ok: false, error: String(e) }),
       )
-    return true
-  }
-  return false
-})
+      return true
+    }
+    if (msg?.type === 'kick') {
+    // Flush local edits first, then pull. Channel stays open to keep the worker alive.
+      flushOutbox()
+        .then(() => syncAll(msg.full ? 'full' : 'fast'))
+        .then(() => scheduleReminders()) // internally throttled to every 30s
+        .then(
+          () => sendResponse({ ok: true }),
+          (e) => sendResponse({ ok: false, error: String(e) }),
+        )
+      return true
+    }
+    return false
+  },
+)
 
 async function ensureAlarms(): Promise<void> {
   const existing = await chrome.alarms.get('sync')

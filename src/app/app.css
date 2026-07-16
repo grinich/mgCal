@@ -143,28 +143,36 @@
   transition: box-shadow 0.1s;
   box-shadow: 0 0 0 1px var(--bg); /* crisp edge where cascaded chips overlap */
 }
-/* Hover expands the chip to its full content — floating over neighboring
- * columns — so truncated titles are readable without opening the event. */
+/* The title row is the always-visible "tab"; hovering pops a detail card
+ * BELOW it, so the tabs of neighboring events on the same row stay reachable
+ * as the cursor travels across. */
 .chip:hover {
-  width: max-content !important;
-  min-width: var(--w);
-  max-width: 340px;
-  height: max-content !important;
-  min-height: var(--h);
-  padding-right: 10px;
-  box-shadow: 0 0 0 1px var(--bg), 0 4px 16px rgba(0, 0, 0, 0.22);
+  overflow: visible; /* let the card escape the chip bounds */
+  box-shadow: 0 0 0 1px var(--bg), 0 2px 8px rgba(0, 0, 0, 0.18);
   z-index: 19;
 }
-.chip:hover .chip-title { white-space: normal; }
-.chip:hover .chip-time-end { display: inline; }
-.chip-time-end { display: none; }
-.chip.compact .chip-time { display: none; }
-.chip.compact:hover .chip-time { display: block; }
-.chip.dragging:hover {
-  /* keep geometry stable while dragging */
-  width: var(--w) !important;
-  height: var(--h) !important;
+.chip-card {
+  display: none;
+  position: absolute; top: 19px; left: -1px;
+  min-width: calc(100% + 2px); width: max-content; max-width: 320px;
+  background: inherit;
+  border-left: 3px solid var(--c);
+  border-radius: 0 6px 6px 6px;
+  padding: 3px 9px 5px 5px;
+  box-shadow: 0 0 0 1px var(--bg), 0 8px 22px rgba(0, 0, 0, 0.24);
+  cursor: default;
 }
+.chip:hover .chip-card { display: block; }
+.chip.dragging .chip-card { display: none; }
+.chip-card-title {
+  font-size: 12px; font-weight: 600; line-height: 1.3;
+  color: color-mix(in srgb, var(--c) 45%, var(--text));
+  white-space: normal; word-break: break-word;
+}
+:root[data-theme='dark'] .chip-card-title { color: color-mix(in srgb, var(--c) 30%, var(--text)); }
+.chip-card-loc { font-size: 11px; color: var(--text-muted); white-space: normal; word-break: break-word; }
+.chip.compact .chip-time, .chip.compact .chip-loc { display: none; }
+.chip.compact .chip-card .chip-time { display: block; }
 .chip.selected { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 18; }
 :root[data-theme='dark'] .chip { background: color-mix(in srgb, var(--c) 32%, var(--bg)); }
 :root[data-theme='dark'] .chip-title { color: color-mix(in srgb, var(--c) 30%, var(--text)); }
@@ -178,9 +186,6 @@
   font-size: 11px; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.chip-loc.hover-only { display: none; }
-.chip:hover .chip-loc.hover-only { display: block; }
-.chip:hover .chip-loc { white-space: normal; }
 .chip.declined .chip-title { text-decoration: line-through; opacity: 0.6; }
 .chip.pending::after, .lane-chip.pending::after {
   content: ''; position: absolute; top: 3px; right: 3px;
@@ -359,6 +364,17 @@
 }
 .peek-chevron.open { transform: rotate(180deg); }
 .peek-avatar-group { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border-strong); }
+.peek-guest-btn {
+  font: inherit; color: var(--text); background: none; border: none;
+  padding: 0; width: 100%; cursor: pointer; text-align: left;
+}
+.peek-members { max-height: 150px; overflow-y: auto; margin: 2px 0 4px; }
+.peek-member {
+  display: flex; align-items: center; gap: 8px;
+  padding: 2px 0 2px 30px; font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.peek-avatar-sm { width: 16px; height: 16px; font-size: 7px; flex: none; }
 .peek-more-btn {
   font: inherit; font-size: 12px; color: var(--text-muted);
   background: none; border: none; padding: 2px 0; cursor: pointer;
