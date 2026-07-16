@@ -292,6 +292,11 @@
   border: none; outline: none; flex: 1; min-width: 120px; padding: 3px 2px;
 }
 
+/* ---------- recurrence scope dialog ---------- */
+.scope-panel { width: 320px; }
+.scope-btns { display: flex; flex-direction: column; gap: 6px; }
+.scope-btns .btn { text-align: left; padding: 8px 12px; }
+
 /* ---------- toasts ---------- */
 .toasts {
   position: fixed; right: 16px; bottom: 16px; z-index: 60;

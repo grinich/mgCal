@@ -1,6 +1,6 @@
-import { deleteEvent, rsvpEvent } from '../../data/outbox'
+import { deleteEventScoped, rsvpEvent } from '../../data/outbox'
 import type { EventRow, GAttendee } from '../../data/types'
-import { calendarById, editor, openEdit, selectedEvent, selectedKey } from '../state/signals'
+import { askScope, calendarById, editor, openEdit, selectedEvent, selectedKey } from '../state/signals'
 import { fmtTime } from '../time'
 import { chipColor } from '../views/EventChip'
 
@@ -48,6 +48,7 @@ export function EventPopover() {
         </button>
       </div>
       <div class="peek-time">{timeLabel(ev)}</div>
+      {ev.recurringEventId && <div class="peek-row muted">↻ Repeats</div>}
       {ev.location && <div class="peek-row">📍 {ev.location}</div>}
       {cal && <div class="peek-row muted">{cal.summary}</div>}
       {ev.hangoutLink && (
@@ -92,8 +93,11 @@ export function EventPopover() {
         <button
           class="btn danger"
           onClick={() => {
-            void deleteEvent(ev)
-            selectedKey.value = null
+            void askScope(ev, 'delete').then((scope) => {
+              if (!scope) return
+              void deleteEventScoped(ev, scope)
+              selectedKey.value = null
+            })
           }}
         >
           Delete

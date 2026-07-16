@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals'
-import { patchEvent } from '../../data/outbox'
+import { patchEventScoped } from '../../data/outbox'
 import type { EventRow, GDateTime } from '../../data/types'
-import { openCreate, selectedKey } from '../state/signals'
+import { askScope, openCreate, selectedKey } from '../state/signals'
 import { DAY, MIN } from '../time'
 
 const SNAP = 15 * MIN
@@ -91,9 +91,13 @@ export function startEventDrag(e: PointerEvent, ev: EventRow, mode: 'move' | 're
     if (cur.moved && (cur.startMs !== ev.startMs || cur.endMs !== ev.endMs)) {
       justDragged = true
       setTimeout(() => (justDragged = false), 0)
-      void patchEvent(ev, {
-        start: toGTime(cur.startMs, ev.allDay),
-        end: toGTime(cur.endMs, ev.allDay),
+      void askScope(ev, 'edit').then((scope) => {
+        if (!scope) return // cancelled: chip snaps back (no local write happened)
+        void patchEventScoped(
+          ev,
+          { start: toGTime(cur.startMs, ev.allDay), end: toGTime(cur.endMs, ev.allDay) },
+          scope,
+        )
       })
     }
   }

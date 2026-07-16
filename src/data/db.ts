@@ -64,7 +64,7 @@ export function normalizeEvent(e: GEvent, calendarId: string, baselineGen: numbe
   }
 }
 
-function parseGTime(t?: { date?: string; dateTime?: string }): number | undefined {
+export function parseGTime(t?: { date?: string; dateTime?: string }): number | undefined {
   if (t?.dateTime) return Date.parse(t.dateTime)
   if (t?.date) {
     // All-day dates are timezone-less; anchor to local midnight for display.
@@ -72,6 +72,22 @@ function parseGTime(t?: { date?: string; dateTime?: string }): number | undefine
     return new Date(y!, m! - 1, d!).getTime()
   }
   return undefined
+}
+
+/** Shift a Google date/dateTime by deltaMs, preserving its all-day-ness. */
+export function shiftGTime(
+  g: { date?: string; dateTime?: string } | undefined,
+  deltaMs: number,
+): { date?: string; dateTime?: string } | undefined {
+  if (!g) return undefined
+  const ms = (parseGTime(g) ?? 0) + deltaMs
+  if (g.date) {
+    const d = new Date(ms)
+    return {
+      date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+    }
+  }
+  return { dateTime: new Date(ms).toISOString() }
 }
 
 /** Events overlapping [startMs, endMs), across all calendars. */

@@ -9,6 +9,7 @@ import { isOAuthConfigured } from '../google/auth'
 import { HelpOverlay, SettingsPanel } from './SettingsPanel'
 import { EventEditor } from './event/EventEditor'
 import { EventPopover } from './event/EventPopover'
+import { RecurrenceScopeDialog } from './event/RecurrenceScopeDialog'
 import { Toasts } from './Toasts'
 
 export function App() {
@@ -37,6 +38,7 @@ export function App() {
       <HelpOverlay open={helpOpen.value} onClose={() => (helpOpen.value = false)} />
       <EventPopover />
       <EventEditor />
+      <RecurrenceScopeDialog />
       <Toasts />
     </div>
   )

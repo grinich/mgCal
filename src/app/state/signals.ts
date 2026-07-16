@@ -92,6 +92,33 @@ export function selectedEvent(): EventRow | undefined {
   return visibleEvents.value.find((e) => `${e.calendarId}|${e.id}` === key)
 }
 
+// ---------- recurring scope dialog ----------
+
+export type RecurringScope = 'this' | 'following' | 'all'
+
+export interface ScopeDialogState {
+  summary: string
+  action: 'edit' | 'delete'
+  resolve: (s: RecurringScope | null) => void
+}
+
+export const scopeDialog = signal<ScopeDialogState | null>(null)
+
+/** Resolve which instances a recurring edit applies to (asks the user). */
+export function askScope(ev: EventRow, action: 'edit' | 'delete'): Promise<RecurringScope | null> {
+  if (!ev.recurringEventId) return Promise.resolve('this')
+  return new Promise((res) => {
+    scopeDialog.value = {
+      summary: ev.summary ?? '(no title)',
+      action,
+      resolve: (s) => {
+        scopeDialog.value = null
+        res(s)
+      },
+    }
+  })
+}
+
 export interface Range {
   startMs: number
   endMs: number

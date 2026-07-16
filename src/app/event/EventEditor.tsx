@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { createEvent, deleteEvent, patchEvent } from '../../data/outbox'
+import { createEvent, deleteEventScoped, patchEventScoped } from '../../data/outbox'
+import { presetLabel, presetRule, type RecurrencePreset } from '../../data/rrule'
 import type { GAttendee, GDateTime, GEvent } from '../../data/types'
-import { calendars, editor, selectedKey, writableCalendars } from '../state/signals'
+import { askScope, calendars, editor, selectedKey, writableCalendars } from '../state/signals'
 import { DAY, startOfDay } from '../time'
 import { getKnownEmails } from './emails'
+
+const PRESETS: RecurrencePreset[] = ['none', 'daily', 'weekly', 'weekdays', 'monthly', 'yearly']
 
 function ymd(ms: number): string {
   const d = new Date(ms)
@@ -47,6 +50,7 @@ function EditorForm() {
   )
   const [guestInput, setGuestInput] = useState('')
   const [addMeet, setAddMeet] = useState(false)
+  const [repeat, setRepeat] = useState<RecurrencePreset>('none')
   const [knownEmails, setKnownEmails] = useState<string[]>([])
   const titleRef = useRef<HTMLInputElement>(null)
 
@@ -96,6 +100,8 @@ function EditorForm() {
       if (description) fields.description = description
       if (guests.length) fields.attendees = guests.map((email) => ({ email }))
       if (meetRequest) fields.conferenceData = meetRequest
+      const rule = presetRule(repeat, new Date(startMs))
+      if (rule) fields.recurrence = rule
       await createEvent(calendarId, fields)
     } else if (st.original) {
       const patch: Partial<GEvent> = {}
@@ -114,14 +120,20 @@ function EditorForm() {
         )
       }
       if (meetRequest) patch.conferenceData = meetRequest
-      if (Object.keys(patch).length) await patchEvent(st.original, patch)
+      if (Object.keys(patch).length) {
+        const scope = await askScope(st.original, 'edit')
+        if (!scope) return // keep the editor open
+        await patchEventScoped(st.original, patch, scope)
+      }
     }
     close()
   }
 
   async function del() {
     if (st.original) {
-      await deleteEvent(st.original)
+      const scope = await askScope(st.original, 'delete')
+      if (!scope) return
+      await deleteEventScoped(st.original, scope)
       selectedKey.value = null
     }
     close()
@@ -211,6 +223,20 @@ function EditorForm() {
               ))}
           </datalist>
         </div>
+        {st.mode === 'create' && (
+          <div class="editor-row">
+            <select value={repeat} onChange={(e) => setRepeat(e.currentTarget.value as RecurrencePreset)}>
+              {PRESETS.map((p) => (
+                <option key={p} value={p}>
+                  {presetLabel(p, new Date(parseLocal(startDate, startTime)))}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {st.mode === 'edit' && st.original?.recurringEventId && (
+          <div class="editor-row muted">↻ Part of a recurring series</div>
+        )}
         {!st.original?.hangoutLink && (
           <label class="editor-check">
             <input type="checkbox" checked={addMeet} onChange={(e) => setAddMeet(e.currentTarget.checked)} />

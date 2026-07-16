@@ -73,10 +73,26 @@ export interface OutboxOp {
   payload: Record<string, unknown>
   ifMatchEtag?: string
   phase?: number // splitRecurring resumability
+  master?: boolean // eventId is a recurrence master (fetched fresh at flush time)
+  /** For scope=all time edits: shift the master's own start/end by this much. */
+  timeDelta?: { startMs: number; endMs: number }
   attempts: number
   nextAttemptMs: number
   lastError?: string
   createdMs: number
+}
+
+/** splitRecurring op payload. */
+export interface SplitPayload {
+  instanceOriginalStart: GDateTime
+  /** Absolute start/end for the new series' first occurrence (edited values). */
+  newStart?: GDateTime
+  newEnd?: GDateTime
+  /** Non-time field changes applied to the new series. */
+  fields: Partial<GEvent>
+  newId: string
+  deleteOnly?: boolean
+  [key: string]: unknown
 }
 
 export interface SyncStateRow {

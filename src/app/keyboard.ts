@@ -1,17 +1,19 @@
 import {
+  askScope,
   editor,
   goToday,
   helpOpen,
   navigate,
   openCreate,
   openEdit,
+  scopeDialog,
   selectedEvent,
   selectedKey,
   settingsOpen,
   setView,
   toggleSidebar,
 } from './state/signals'
-import { deleteEvent } from '../data/outbox'
+import { deleteEventScoped } from '../data/outbox'
 
 type Handler = () => void
 
@@ -39,15 +41,18 @@ export function initKeyboard(): void {
   })
   const deleteSelected = () => {
     const ev = selectedEvent()
-    if (ev) {
-      void deleteEvent(ev)
+    if (!ev) return
+    void askScope(ev, 'delete').then((scope) => {
+      if (!scope) return
+      void deleteEventScoped(ev, scope)
       selectedKey.value = null
-    }
+    })
   }
   bindKey('Backspace', deleteSelected)
   bindKey('Delete', deleteSelected)
   bindKey('Escape', () => {
-    if (editor.value) editor.value = null
+    if (scopeDialog.value) scopeDialog.value.resolve(null)
+    else if (editor.value) editor.value = null
     else if (helpOpen.value) helpOpen.value = false
     else if (settingsOpen.value) settingsOpen.value = false
     else selectedKey.value = null

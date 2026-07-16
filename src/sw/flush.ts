@@ -1,7 +1,8 @@
 import { api, ApiError } from '../google/api'
 import { AuthError } from '../google/auth'
-import { db, getSetting, normalizeEvent, setSetting, type DB } from '../data/db'
-import type { GAttendee, GEvent, OutboxOp } from '../data/types'
+import { db, getSetting, normalizeEvent, setSetting, shiftGTime, type DB } from '../data/db'
+import { stripCount, truncateRecurrence, untilBefore } from '../data/rrule'
+import type { GAttendee, GEvent, OutboxOp, SplitPayload } from '../data/types'
 
 export interface ConflictRecord {
   id: string
@@ -93,12 +94,30 @@ async function execOp(d: DB, op: OutboxOp): Promise<void> {
       break
     }
     case 'patch': {
-      server = await api<GEvent>(`${evPath(op)}/${op.eventId}`, {
-        method: 'PATCH',
-        query: { conferenceDataVersion: 1, sendUpdates: 'all' },
-        body: op.payload,
-        ifMatch: op.ifMatchEtag,
-      })
+      if (op.master) {
+        // Scope=all edit: the master isn't cached — fetch it, apply the
+        // instance's time shift to the master's own first-occurrence times.
+        const masterPath = `${evPath(op)}/${op.eventId}`
+        const master = await api<GEvent>(masterPath)
+        const body: Record<string, unknown> = { ...op.payload }
+        if (op.timeDelta) {
+          body.start = shiftGTime(master.start, op.timeDelta.startMs)
+          body.end = shiftGTime(master.end, op.timeDelta.endMs)
+        }
+        server = await api<GEvent>(masterPath, {
+          method: 'PATCH',
+          query: { conferenceDataVersion: 1, sendUpdates: 'all' },
+          body,
+          ifMatch: master.etag,
+        })
+      } else {
+        server = await api<GEvent>(`${evPath(op)}/${op.eventId}`, {
+          method: 'PATCH',
+          query: { conferenceDataVersion: 1, sendUpdates: 'all' },
+          body: op.payload,
+          ifMatch: op.ifMatchEtag,
+        })
+      }
       break
     }
     case 'delete': {
@@ -129,9 +148,19 @@ async function execOp(d: DB, op: OutboxOp): Promise<void> {
       break
     }
     case 'splitRecurring': {
-      server = await execSplitRecurring(d, op)
-      break
+      await execSplitRecurring(d, op)
+      // The op mutates its own payload (phase snapshot); skip generic
+      // coalescing bookkeeping — a split is never coalesced into.
+      await d.delete('outbox', op.seq!)
+      return
     }
+  }
+
+  // Recurrence masters are never stored as rows (the grid shows expanded
+  // instances only) — drop the optimistic stand-in and let sync fill in.
+  if (server?.recurrence?.length || op.master) {
+    if (op.opType === 'create') await d.delete('events', [op.calendarId, op.eventId])
+    server = undefined
   }
 
   // Success bookkeeping. The page may have coalesced more edits into this op
@@ -157,9 +186,66 @@ async function execOp(d: DB, op: OutboxOp): Promise<void> {
   }
 }
 
-// Placeholder until Milestone 7 wires the three-phase recurring split.
-async function execSplitRecurring(_d: DB, _op: OutboxOp): Promise<GEvent | undefined> {
-  throw new ApiError(400, 'notImplemented', 'splitRecurring not implemented yet')
+const CLONE_FIELDS = [
+  'summary',
+  'description',
+  'location',
+  'attendees',
+  'reminders',
+  'colorId',
+  'transparency',
+  'visibility',
+  'recurrence',
+] as const
+
+/**
+ * "This and following": truncate the master's RRULE before the split instance,
+ * then (unless deleting) create a new series starting at the edited instance.
+ * Resumable: phase 1 = master truncated; the payload snapshots the master so a
+ * killed worker can still build the new series without re-reading pre-split state.
+ */
+async function execSplitRecurring(d: DB, op: OutboxOp): Promise<void> {
+  const p = op.payload as unknown as SplitPayload
+  const masterPath = `${evPath(op)}/${op.eventId}`
+
+  if (!op.phase || op.phase < 1) {
+    const master = await api<GEvent>(masterPath)
+    if (!master.recurrence?.length) throw new ApiError(400, 'badSplit', 'Event is not a recurring master')
+    const snapshot: Partial<GEvent> = {}
+    for (const f of CLONE_FIELDS) if (master[f] !== undefined) (snapshot as any)[f] = master[f]
+    const until = untilBefore(p.instanceOriginalStart)
+    await api<GEvent>(masterPath, {
+      method: 'PATCH',
+      query: { sendUpdates: 'all' },
+      body: { recurrence: truncateRecurrence(master.recurrence, until) },
+      ifMatch: master.etag,
+    })
+    op.phase = 1
+    p.masterSnapshot = snapshot
+    await d.put('outbox', op)
+  }
+
+  if (p.deleteOnly) return
+
+  const snap = (p.masterSnapshot ?? {}) as Partial<GEvent>
+  const body: Record<string, unknown> = {
+    ...snap,
+    ...p.fields,
+    id: p.newId,
+    start: p.newStart,
+    end: p.newEnd,
+    recurrence: stripCount((snap.recurrence ?? []) as string[]),
+  }
+  try {
+    await api<GEvent>(evPath(op), {
+      method: 'POST',
+      query: { conferenceDataVersion: 1, sendUpdates: 'all' },
+      body,
+    })
+  } catch (e) {
+    // 409: new series already created by a previous attempt.
+    if (!(e instanceof ApiError && e.status === 409)) throw e
+  }
 }
 
 /** Server wins locally; the edit is preserved in a conflict record for retry. */
