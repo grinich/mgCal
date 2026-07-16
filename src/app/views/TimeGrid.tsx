@@ -130,8 +130,9 @@ function DayColumn({ day, events, geom }: { day: Date; events: EventRow[]; geom:
           ev={p.ev}
           top={p.top}
           height={p.height}
-          col={p.col}
-          cols={p.cols}
+          leftPct={p.leftPct}
+          widthPct={p.widthPct}
+          z={p.z}
           geom={geom}
         />
       ))}

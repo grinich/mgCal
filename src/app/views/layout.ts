@@ -5,11 +5,14 @@ export interface Positioned {
   ev: EventRow
   top: number
   height: number
-  col: number
-  cols: number
+  leftPct: number
+  widthPct: number
+  z: number
 }
 
-/** Timed events for one day column: cluster overlap partitioning. */
+/** Timed events for one day column: cluster overlap partitioning with a
+ * Google-style cascade — chips expand ~70% into the next column's slot and
+ * later columns stack on top, so titles stay readable in dense clusters. */
 export function layoutDay(events: EventRow[], dayStartMs: number): Positioned[] {
   const dayEndMs = dayStartMs + DAY
   const items = events
@@ -27,13 +30,26 @@ export function layoutDay(events: EventRow[], dayStartMs: number): Positioned[] 
   const flush = () => {
     if (!cluster.length) return
     const cols = Math.max(...cluster.map((c) => c.col)) + 1
+    const slot = 100 / cols
     for (const c of cluster) {
+      // Nearest column to the right containing a chip that overlaps in time —
+      // we may expand up to 70% into its slot (it will render on top of us).
+      let next = cols
+      for (const o of cluster) {
+        if (o.col > c.col && o.col < next && o.start < c.end && o.end > c.start) next = o.col
+      }
+      const leftPct = c.col * slot
+      const widthPct =
+        next < cols
+          ? Math.min(100 - leftPct, (next - c.col) * slot + slot * 0.7)
+          : 100 - leftPct
       out.push({
         ev: c.ev,
         top: ((c.start - dayStartMs) / HOUR) * HOUR_H,
         height: Math.max(((c.end - c.start) / HOUR) * HOUR_H - 2, 17),
-        col: c.col,
-        cols,
+        leftPct,
+        widthPct,
+        z: 2 + c.col,
       })
     }
     cluster = []

@@ -45,15 +45,17 @@ export function EventChip({
   ev,
   top,
   height,
-  col,
-  cols,
+  leftPct,
+  widthPct,
+  z,
   geom,
 }: {
   ev: EventRow
   top: number
   height: number
-  col: number
-  cols: number
+  leftPct: number
+  widthPct: number
+  z: number
   geom?: GridGeom
 }) {
   const c = chipColor(ev)
@@ -75,8 +77,9 @@ export function EventChip({
       style={{
         top: `${top}px`,
         height: `${height}px`,
-        left: `calc(${(col / cols) * 100}% + 1px)`,
-        width: `calc(${100 / cols}% - 3px)`,
+        left: `calc(${leftPct}% + 1px)`,
+        width: `calc(${widthPct}% - 3px)`,
+        '--z': z,
         '--c': c,
       }}
       onPointerDown={(e) => geom && canEdit(ev) && startEventDrag(e, ev, 'move', geom)}

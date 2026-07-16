@@ -125,7 +125,7 @@
 
 .now-line {
   position: absolute; left: 0; right: 0; height: 2px;
-  background: var(--now-line); z-index: 5; pointer-events: none;
+  background: var(--now-line); z-index: 16; pointer-events: none;
 }
 .now-dot {
   position: absolute; left: -4px; top: -3px;
@@ -134,16 +134,17 @@
 
 /* ---------- event chips ---------- */
 .chip {
-  position: absolute; z-index: 2;
+  position: absolute; z-index: var(--z, 2);
   background: color-mix(in srgb, var(--c) 22%, var(--bg));
   border-left: 3px solid var(--c);
   border-radius: 4px;
   padding: 2px 6px 2px 5px;
   overflow: hidden; cursor: pointer;
   transition: box-shadow 0.1s;
+  box-shadow: 0 0 0 1px var(--bg); /* crisp edge where cascaded chips overlap */
 }
-.chip:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); z-index: 3; }
-.chip.selected { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 4; }
+.chip:hover { box-shadow: 0 0 0 1px var(--bg), 0 2px 8px rgba(0, 0, 0, 0.2); z-index: 19; }
+.chip.selected { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 18; }
 :root[data-theme='dark'] .chip { background: color-mix(in srgb, var(--c) 32%, var(--bg)); }
 :root[data-theme='dark'] .chip-title { color: color-mix(in srgb, var(--c) 30%, var(--text)); }
 .chip-title {
@@ -221,7 +222,7 @@
   cursor: ns-resize; touch-action: none;
 }
 .ghost-chip {
-  position: absolute; left: 1px; right: 2px; z-index: 6;
+  position: absolute; left: 1px; right: 2px; z-index: 17;
   background: color-mix(in srgb, var(--c) 30%, var(--bg));
   border: 1.5px dashed var(--c);
   border-radius: 4px; padding: 2px 6px;
