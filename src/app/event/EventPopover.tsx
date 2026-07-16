@@ -5,6 +5,7 @@ import { askScope, calendarById, editor, openEdit, selectedAnchor, selectedEvent
 import { DAY, fmtTime } from '../time'
 import { chipColor } from '../views/EventChip'
 import { eventColorLabel } from '../colors'
+import { locationHref } from '../location'
 
 const W = 340
 
@@ -190,7 +191,9 @@ function Popover({ ev }: { ev: EventRow }) {
       {ev.location && (
         <div class="peek-row">
           <span class="peek-icon"><Icon d={I.pin} /></span>
-          <span class="peek-row-text">{ev.location}</span>
+          <a class="peek-row-text peek-loc-link" href={locationHref(ev.location)} target="_blank" rel="noreferrer">
+            {ev.location}
+          </a>
         </div>
       )}
 

@@ -1,5 +1,6 @@
 import type { EventRow } from '../../data/types'
 import { eventColorHex, textOnColor } from '../colors'
+import { cleanLocation, locationHref } from '../location'
 import { calendarById, openEdit, selectedAnchor, selectedKey } from '../state/signals'
 import { fmtTime } from '../time'
 import { drag, startEventDrag, wasDragged, type GridGeom } from './drag'
@@ -40,17 +41,20 @@ function canEdit(e: EventRow): boolean {
   return true
 }
 
-/** Locations are often URLs (Zoom links) or long room lists — compact them. */
-function cleanLocation(loc: string): string {
-  const first = loc.split(',')[0]!.trim()
-  if (/^https?:\/\//i.test(first)) {
-    try {
-      return new URL(first).hostname.replace(/^www\./, '')
-    } catch {
-      return first
-    }
-  }
-  return loc
+function LocationLink({ loc, cls }: { loc: string; cls: string }) {
+  return (
+    <a
+      class={cls}
+      href={locationHref(loc)}
+      target="_blank"
+      rel="noreferrer"
+      title={loc}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      📍 {cleanLocation(loc)}
+    </a>
+  )
 }
 
 /** Timed event chip, absolutely positioned by the caller. */
@@ -115,7 +119,7 @@ export function EventChip({
     >
       <div class="chip-title">{ev.summary || '(no title)'}</div>
       <div class="chip-time">{fmtTime(ev.startMs)}</div>
-      {ev.location && height >= 50 && <div class="chip-loc">📍 {cleanLocation(ev.location)}</div>}
+      {ev.location && height >= 50 && <LocationLink loc={ev.location} cls="chip-loc" />}
       {/* Hover card: expands below the title "tab", so neighboring tabs on the
           same row stay reachable as the cursor travels across. */}
       <div class="chip-card">
@@ -123,7 +127,7 @@ export function EventChip({
         <div class="chip-time">
           {fmtTime(ev.startMs)} – {fmtTime(ev.endMs)}
         </div>
-        {ev.location && <div class="chip-card-loc">📍 {cleanLocation(ev.location)}</div>}
+        {ev.location && <LocationLink loc={ev.location} cls="chip-card-loc" />}
       </div>
       {geom && canEdit(ev) && (
         <div class="resize-handle" onPointerDown={(e) => startEventDrag(e, ev, 'resize', geom)} />

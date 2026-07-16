@@ -199,9 +199,14 @@
 }
 .chip-time { font-size: 11px; opacity: 0.85; }
 .chip-loc {
-  font-size: 11px; opacity: 0.85;
+  display: block; font-size: 11px; opacity: 0.85;
+  color: inherit; text-decoration: none;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.chip-loc:hover, .chip-card-loc:hover { text-decoration: underline; opacity: 1; }
+.chip-card-loc { display: block; color: inherit; text-decoration: none; }
+.peek-loc-link { color: var(--text); text-decoration: none; }
+.peek-loc-link:hover { color: var(--accent); text-decoration: underline; }
 .chip.pending::after, .lane-chip.pending::after {
   content: ''; position: absolute; top: 3px; right: 3px;
   width: 6px; height: 6px; border-radius: 50%;
