@@ -5,14 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>mgCal</title>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📅</text></svg>' />
-<script>
-  // Theme must resolve before first style calculation — no flash.
-  (function () {
-    var t = localStorage.getItem('theme') || 'system';
-    var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  })();
-</script>
+<!-- External boot scripts: MV3 CSP (script-src 'self') blocks inline scripts. -->
+<script src="/theme-boot.js"></script>
 <style>
   :root {
     --bg: #ffffff;
@@ -115,58 +109,7 @@
     </div>
   </div>
 </div>
-<script>
-  // Paint the current week's skeleton synchronously (real dates, hour labels,
-  // scrolled to ~8am) so the first frame is already "the calendar".
-  (function () {
-    var now = new Date();
-    var view = localStorage.getItem('view') || 'week';
-    var anchor = new Date(localStorage.getItem('anchor') || now);
-    if (isNaN(anchor)) anchor = now;
-    if (view === 'month') {
-      // Month view has a different shape; keep just the header, no week skeleton.
-      document.getElementById('sk-days').style.display = 'none';
-      document.getElementById('sk-grid').style.display = 'none';
-    }
-    var ws = localStorage.getItem('weekStart') === '1' ? 1 : 0;
-    var start = new Date(anchor);
-    start.setHours(0, 0, 0, 0);
-    if (view !== 'day') start.setDate(start.getDate() - ((start.getDay() - ws + 7) % 7));
-    var numDays = view === 'day' ? 1 : 7;
-    var days = document.getElementById('sk-days');
-    var todayVisible = false;
-    var names = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-    days.style.gridTemplateColumns = 'var(--gutter) repeat(' + numDays + ', 1fr)';
-    var inner = document.querySelector('.sk-grid-inner');
-    inner.style.gridTemplateColumns = 'var(--gutter) repeat(' + numDays + ', 1fr)';
-    var cols = inner.querySelectorAll('.sk-col');
-    for (var c = numDays; c < cols.length; c++) cols[c].remove();
-    for (var i = 0; i < numDays; i++) {
-      var d = new Date(start); d.setDate(start.getDate() + i);
-      var isToday = d.toDateString() === now.toDateString();
-      todayVisible = todayVisible || isToday;
-      var el = document.createElement('div');
-      el.className = 'sk-day' + (isToday ? ' today' : '');
-      el.innerHTML = '<div class="dow">' + names[d.getDay()] + '</div><div class="dom">' + d.getDate() + '</div>';
-      days.appendChild(el);
-    }
-    document.getElementById('sk-title').textContent =
-      anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-    var gutter = document.getElementById('sk-gutter');
-    for (var h = 1; h < 24; h++) {
-      var lab = document.createElement('div');
-      lab.className = 'sk-hour';
-      lab.style.top = 'calc(var(--hour-h) * ' + h + ')';
-      lab.textContent = (h % 12 || 12) + ' ' + (h < 12 ? 'AM' : 'PM');
-      gutter.appendChild(lab);
-    }
-    // Must mirror defaultScrollTop() in src/app/time.ts so hydration doesn't jump.
-    var grid = document.getElementById('sk-grid');
-    grid.scrollTop = todayVisible
-      ? Math.max(0, (now.getHours() + now.getMinutes() / 60) * 56 - 180)
-      : 8 * 56 - 8;
-  })();
-</script>
+<script src="/skeleton-boot.js"></script>
 <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 import { api, ApiError } from '../google/api'
 import { AuthError } from '../google/auth'
-import { db, normalizeEvent, type DB } from '../data/db'
+import { db, getSetting, normalizeEvent, setSetting, type DB } from '../data/db'
 import type { CalendarRow, GEvent, SyncStateRow } from '../data/types'
 
 const DAY = 24 * 3600 * 1000
@@ -262,7 +262,23 @@ async function sweepStale(d: DB, calendarId: string, gen: number): Promise<numbe
   return removed
 }
 
-async function syncCalendarList(d: DB): Promise<void> {
+/** Re-apply Google's per-calendar "selected" visibility over local toggles. */
+export async function resetVisibilityFromGoogle(): Promise<void> {
+  const d = await db()
+  const items = await fetchCalendarList()
+  const tx = d.transaction('calendars', 'readwrite')
+  for (const it of items) {
+    const cal = await tx.store.get(it.id)
+    if (cal) {
+      cal.hidden = it.selected !== true
+      await tx.store.put(cal)
+    }
+  }
+  await tx.done
+  broadcast({ type: 'db-updated', calendarIds: ['$calendars'] })
+}
+
+async function fetchCalendarList(): Promise<CalListEntry[]> {
   const items: CalListEntry[] = []
   let pageToken: string | undefined
   do {
@@ -272,6 +288,11 @@ async function syncCalendarList(d: DB): Promise<void> {
     items.push(...(resp.items ?? []))
     pageToken = resp.nextPageToken
   } while (pageToken)
+  return items
+}
+
+async function syncCalendarList(d: DB): Promise<void> {
+  const items = await fetchCalendarList()
 
   const existing = await d.getAll('calendars')
   const byId = new Map(existing.map((c) => [c.id, c]))
@@ -289,13 +310,27 @@ async function syncCalendarList(d: DB): Promise<void> {
       primary: it.primary,
       timeZone: it.timeZone,
       defaultReminders: it.defaultReminders,
-      hidden: prev?.hidden ?? it.selected === false, // seed from Google's "selected" checkbox
+      // Seed from Google's "selected" checkbox. Google OMITS the field for
+      // unchecked calendars, so only selected === true means visible.
+      hidden: prev ? prev.hidden : it.selected !== true,
     })
   }
   for (const c of existing) {
     if (!seen.has(c.id)) await tx.store.delete(c.id)
   }
   await tx.done
+
+  // Cache the API event-color palette daily (category picker enumerates it).
+  const colorsMeta = await getSetting<{ ts: number }>('apiColorsMeta')
+  if (!colorsMeta || Date.now() - colorsMeta.ts > 86_400_000) {
+    try {
+      const colors = await api<{ event?: Record<string, { background: string }> }>('/colors')
+      await setSetting('apiEventColors', colors.event ?? {})
+      await setSetting('apiColorsMeta', { ts: Date.now() })
+    } catch {
+      /* non-fatal */
+    }
+  }
 
   // Purge data for calendars that disappeared.
   for (const c of existing) {

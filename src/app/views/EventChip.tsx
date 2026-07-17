@@ -1,8 +1,9 @@
-import { rsvpEvent } from '../../data/outbox'
+import { useState } from 'preact/hooks'
+import { patchEventScoped, rsvpEvent } from '../../data/outbox'
 import type { EventRow } from '../../data/types'
-import { eventColorHex, textOnColor } from '../colors'
+import { EVENT_COLORS, eventColorHex, textOnColor } from '../colors'
 import { cleanLocation, locationHref } from '../location'
-import { calendarById, openEdit, selectedAnchor, selectedKey } from '../state/signals'
+import { askScope, calendarById, openEdit, selectedAnchor, selectedKey } from '../state/signals'
 import { fmtTime } from '../time'
 import { drag, startEventDrag, wasDragged, type GridGeom } from './drag'
 
@@ -40,6 +41,51 @@ export function toggleSelect(e: EventRow, el?: HTMLElement): void {
 function canEdit(e: EventRow): boolean {
   // Server enforces real permissions; this just avoids futile drags on read-only calendars.
   return true
+}
+
+/** Color + category pill in the hover card; click to reassign the colorId. */
+function CategoryPicker({ ev }: { ev: EventRow }) {
+  const [open, setOpen] = useState(false)
+  const current = ev.colorId ? EVENT_COLORS[ev.colorId] : undefined
+  const calColor = calendarById.value.get(ev.calendarId)?.backgroundColor ?? 'var(--accent)'
+
+  const set = (colorId: string) => {
+    setOpen(false)
+    if ((ev.colorId ?? '') === colorId) return
+    void askScope(ev, 'edit').then((scope) => {
+      if (!scope) return
+      // Empty = revert to calendar color (null clears server-side).
+      void patchEventScoped(ev, { colorId: (colorId || null) as unknown as string }, scope)
+    })
+  }
+
+  return (
+    <div class="cat-pick" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+      <button class="cat-btn" title="Change category" onClick={() => setOpen(!open)}>
+        <span class="cat-dot" style={{ background: current?.hex ?? calColor }} />
+        <span class="cat-label">{current ? (current.label ?? current.name) : 'Category'}</span>
+        <span class="cat-chev">▾</span>
+      </button>
+      {open && (
+        <div class="cat-menu">
+          <button class={'cat-item' + (!ev.colorId ? ' active' : '')} onClick={() => set('')}>
+            <span class="cat-dot" style={{ background: calColor }} />
+            Calendar default
+          </button>
+          {Object.values(EVENT_COLORS).map((c) => (
+            <button
+              key={c.id}
+              class={'cat-item' + (ev.colorId === c.id ? ' active' : '')}
+              onClick={() => set(c.id)}
+            >
+              <span class="cat-dot" style={{ background: c.hex }} />
+              {c.label ?? c.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function LocationLink({ loc, cls }: { loc: string; cls: string }) {
@@ -124,7 +170,10 @@ export function EventChip({
       {/* Hover card: expands below the title "tab", so neighboring tabs on the
           same row stay reachable as the cursor travels across. */}
       <div class="chip-card">
-        <div class="chip-card-title">{ev.summary || '(no title)'}</div>
+        <div class="chip-card-row1">
+          <div class="chip-card-title">{ev.summary || '(no title)'}</div>
+          <CategoryPicker ev={ev} />
+        </div>
         <div class="chip-time">
           {fmtTime(ev.startMs)} – {fmtTime(ev.endMs)}
         </div>

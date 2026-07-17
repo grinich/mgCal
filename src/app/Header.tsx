@@ -1,10 +1,67 @@
-import { anchor, authNeeded, goToday, navigate, settingsOpen, setView, toggleSidebar, view } from './state/signals'
-import { fmtMonthYear } from './time'
+import {
+  anchor,
+  authNeeded,
+  calendars,
+  debugOpen,
+  goToday,
+  navigate,
+  outboxCount,
+  settingsOpen,
+  setView,
+  syncStates,
+  toggleSidebar,
+  view,
+} from './state/signals'
+import { fmtMonthYear, relTime } from './time'
 import { connectGoogle } from './connect'
+
+function SyncBadge() {
+  const isDev = chrome.runtime.id === 'dev-shim'
+  const cals = calendars.value
+  const states = syncStates.value
+  const byCal = new Map(states.map((s) => [s.calendarId, s]))
+  const synced = cals.filter((c) => byCal.get(c.id)?.phase === 'incremental').length
+  const errors = states.filter((s) => s.error).length
+  const pending = outboxCount.value
+  const lastSync = Math.max(0, ...states.map((s) => s.lastSyncedAt ?? 0))
+
+  let cls = 'ok'
+  let label: string
+  if (isDev && states.length === 0) {
+    cls = 'muted'
+    label = 'Demo data'
+  } else if (authNeeded.value) {
+    cls = 'warn'
+    label = 'Reconnect Google'
+  } else if (cals.length > 0 && synced < cals.length) {
+    cls = 'busy'
+    label = `Syncing ${synced}/${cals.length} calendars…`
+  } else if (pending > 0) {
+    cls = 'busy'
+    label = `Syncing ${pending} change${pending > 1 ? 's' : ''}…`
+  } else if (errors > 0) {
+    cls = 'warn'
+    label = `${errors} sync issue${errors > 1 ? 's' : ''}`
+  } else {
+    label = 'Up to date'
+  }
+
+  return (
+    <button
+      class={'sync-badge ' + cls}
+      title={(lastSync ? `Last sync ${relTime(lastSync)} · ` : '') + 'Click for sync details'}
+      onClick={() => (debugOpen.value = true)}
+    >
+      {cls === 'busy' ? <span class="badge-spin" /> : <span class="badge-dot" />}
+      {label}
+    </button>
+  )
+}
 
 export function Header() {
   return (
     <header class="header">
+      <SyncBadge />
       <button class="icon-btn" title="Toggle sidebar (s)" onClick={toggleSidebar}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M2 4h12M2 8h12M2 12h12" stroke-linecap="round" />

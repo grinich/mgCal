@@ -1,5 +1,6 @@
 import {
   askScope,
+  debugOpen,
   editor,
   goToday,
   helpOpen,
@@ -60,6 +61,7 @@ export function initKeyboard(): void {
     else if (searchOpen.value) searchOpen.value = false
     else if (helpOpen.value) helpOpen.value = false
     else if (settingsOpen.value) settingsOpen.value = false
+    else if (debugOpen.value) debugOpen.value = false
     else selectedKey.value = null
   })
 

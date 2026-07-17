@@ -3,8 +3,8 @@ import { createEvent, deleteEventScoped, patchEventScoped } from '../../data/out
 import { presetLabel, presetRule, type RecurrencePreset } from '../../data/rrule'
 import type { GAttendee, GDateTime, GEvent } from '../../data/types'
 import { EVENT_COLORS } from '../colors'
-import { askScope, calendarById, calendars, editor, selectedKey, writableCalendars } from '../state/signals'
-import { DAY, startOfDay } from '../time'
+import { askScope, calendarById, calendars, editor, selectedKey, weekStart, writableCalendars } from '../state/signals'
+import { DAY, DOW, fmtTime, MIN, startOfDay, startOfWeek } from '../time'
 import { getKnownEmails } from './emails'
 
 const PRESETS: RecurrencePreset[] = ['none', 'daily', 'weekly', 'weekdays', 'monthly', 'yearly']
@@ -14,20 +14,194 @@ function ymd(ms: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function hm(ms: number): string {
-  const d = new Date(ms)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function parseLocal(dateStr: string, timeStr: string): number {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const [hh, mm] = timeStr.split(':').map(Number)
-  return new Date(y!, m! - 1, d!, hh ?? 0, mm ?? 0).getTime()
-}
-
 function toGTime(ms: number, allDay: boolean): GDateTime {
   return allDay ? { date: ymd(ms) } : { dateTime: new Date(ms).toISOString() }
 }
+
+// ---------- keyboard-friendly parsing ----------
+
+/** "9", "930", "9:30", "9am", "9.30pm", "21:15" → minutes past midnight. */
+export function parseTimeText(raw: string): number | null {
+  const s = raw.trim().toLowerCase().replace(/\./g, ':')
+  const m = /^(\d{1,2})(?::?(\d{2}))?\s*(a|am|p|pm)?$/.exec(s)
+  if (!m) return null
+  let h = Number(m[1])
+  const min = Number(m[2] ?? 0)
+  const ap = m[3]
+  if (min > 59) return null
+  if (ap?.startsWith('p') && h < 12) h += 12
+  if (ap?.startsWith('a') && h === 12) h = 0
+  if (h > 23) return null
+  return h * 60 + min
+}
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+
+/** "7/22", "jul 22", "22 jul", "2026-07-22", "july 22 2026" → Date (midnight). */
+export function parseDateText(raw: string, ref: Date): Date | null {
+  const s = raw.trim().toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ')
+  let y: number | undefined, mo: number | undefined, d: number | undefined
+
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s)
+  if (m) [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  if (!m && (m = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/.exec(s))) {
+    mo = Number(m[1])
+    d = Number(m[2])
+    if (m[3]) y = Number(m[3]) < 100 ? 2000 + Number(m[3]) : Number(m[3])
+  }
+  if (!m && (m = /^([a-z]{3,9})\s+(\d{1,2})(?:\s+(\d{4}))?$/.exec(s))) {
+    mo = MONTHS.findIndex((x) => m![1]!.startsWith(x)) + 1
+    d = Number(m[2])
+    if (m[3]) y = Number(m[3])
+  }
+  if (!m && (m = /^(\d{1,2})\s+([a-z]{3,9})(?:\s+(\d{4}))?$/.exec(s))) {
+    d = Number(m[1])
+    mo = MONTHS.findIndex((x) => m![2]!.startsWith(x)) + 1
+    if (m[3]) y = Number(m[3])
+  }
+  if (!mo || !d || mo < 1 || mo > 12 || d < 1 || d > 31) return null
+  const year = y ?? ref.getFullYear()
+  const date = new Date(year, mo - 1, d)
+  return isNaN(date.getTime()) ? null : date
+}
+
+function fmtDateText(ms: number): string {
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+// ---------- field components ----------
+
+function TimeField({ ms, onCommit, label }: { ms: number; onCommit: (minutes: number) => void; label: string }) {
+  const [text, setText] = useState(fmtTime(ms))
+  const [bad, setBad] = useState(false)
+  useEffect(() => {
+    setText(fmtTime(ms))
+    setBad(false)
+  }, [ms])
+  const commit = () => {
+    const mins = parseTimeText(text)
+    if (mins == null) {
+      setBad(true)
+      setText(fmtTime(ms))
+      setTimeout(() => setBad(false), 600)
+    } else {
+      onCommit(mins)
+    }
+  }
+  return (
+    <input
+      class={'field-input time-input' + (bad ? ' bad' : '')}
+      value={text}
+      aria-label={label}
+      onInput={(e) => setText(e.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          commit()
+          ;(e.currentTarget.form?.querySelector('[data-save]') as HTMLElement | null)?.focus()
+        }
+      }}
+      onFocus={(e) => e.currentTarget.select()}
+    />
+  )
+}
+
+function DateField({ ms, onCommit, label }: { ms: number; onCommit: (d: Date) => void; label: string }) {
+  const [text, setText] = useState(fmtDateText(ms))
+  const [bad, setBad] = useState(false)
+  useEffect(() => {
+    setText(fmtDateText(ms))
+    setBad(false)
+  }, [ms])
+  const commit = () => {
+    const d = parseDateText(text, new Date(ms))
+    if (!d) {
+      setBad(true)
+      setText(fmtDateText(ms))
+      setTimeout(() => setBad(false), 600)
+    } else {
+      onCommit(d)
+    }
+  }
+  return (
+    <input
+      class={'field-input date-input' + (bad ? ' bad' : '')}
+      value={text}
+      aria-label={label}
+      onInput={(e) => setText(e.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          commit()
+        }
+      }}
+      onFocus={(e) => e.currentTarget.select()}
+    />
+  )
+}
+
+/** Always-visible mini month calendar. */
+function MiniMonth({ valueMs, onPick }: { valueMs: number; onPick: (d: Date) => void }) {
+  const value = new Date(valueMs)
+  const [view, setView] = useState(new Date(value.getFullYear(), value.getMonth(), 1))
+  useEffect(() => {
+    setView(new Date(value.getFullYear(), value.getMonth(), 1))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value.getFullYear(), value.getMonth()])
+
+  const gridStart = startOfWeek(view, weekStart.value)
+  const today = new Date()
+  const cells = Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(gridStart)
+    d.setDate(gridStart.getDate() + i)
+    return d
+  })
+  const same = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+
+  return (
+    <div class="mini-month">
+      <div class="mini-head">
+        <button type="button" tabIndex={-1} class="icon-btn" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}>
+          ‹
+        </button>
+        <span class="mini-title">
+          {view.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+        </span>
+        <button type="button" tabIndex={-1} class="icon-btn" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}>
+          ›
+        </button>
+      </div>
+      <div class="mini-grid">
+        {Array.from({ length: 7 }, (_, i) => (
+          <span key={'d' + i} class="mini-dow">
+            {DOW[(i + weekStart.value) % 7]!.slice(0, 1)}
+          </span>
+        ))}
+        {cells.map((d) => (
+          <button
+            type="button"
+            tabIndex={-1}
+            key={d.getTime()}
+            class={
+              'mini-cell' +
+              (d.getMonth() !== view.getMonth() ? ' outside' : '') +
+              (same(d, value) ? ' selected' : '') +
+              (same(d, today) ? ' today' : '')
+            }
+            onClick={() => onPick(d)}
+          >
+            {d.getDate()}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------- editor ----------
 
 export function EventEditor() {
   const st = editor.value
@@ -39,10 +213,10 @@ function EditorForm() {
   const st = editor.value!
   const [summary, setSummary] = useState(st.summary)
   const [allDay, setAllDay] = useState(st.allDay)
-  const [startDate, setStartDate] = useState(ymd(st.startMs))
-  const [startTime, setStartTime] = useState(hm(st.startMs))
-  const [endDate, setEndDate] = useState(ymd(st.allDay ? st.endMs - DAY : st.endMs))
-  const [endTime, setEndTime] = useState(hm(st.endMs))
+  // startMs/endMs are the single source of truth. For all-day, endMs holds the
+  // INCLUSIVE end day here; the exclusive day is added back at save time.
+  const [startMs, setStartMs] = useState(st.startMs)
+  const [endMs, setEndMs] = useState(st.allDay ? st.endMs - DAY : st.endMs)
   const [calendarId, setCalendarId] = useState(st.calendarId)
   const [location, setLocation] = useState(st.location)
   const [description, setDescription] = useState(st.description)
@@ -61,6 +235,26 @@ function EditorForm() {
     void getKnownEmails().then(setKnownEmails)
   }, [])
 
+  const close = () => (editor.value = null)
+
+  // Moving the start preserves duration (Google-style); end clamps to start.
+  function moveStart(next: number): void {
+    const dur = Math.max(endMs - startMs, allDay ? 0 : 15 * MIN)
+    setStartMs(next)
+    setEndMs(next + dur)
+  }
+  function moveEnd(next: number): void {
+    setEndMs(allDay ? Math.max(next, startMs) : Math.max(next, startMs + 15 * MIN))
+  }
+  const withDate = (ms: number, d: Date) => {
+    const t = new Date(ms)
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), t.getHours(), t.getMinutes()).getTime()
+  }
+  const withMinutes = (ms: number, minutes: number) => {
+    const t = new Date(ms)
+    return new Date(t.getFullYear(), t.getMonth(), t.getDate(), Math.floor(minutes / 60), minutes % 60).getTime()
+  }
+
   function addGuest(raw: string): void {
     const email = raw.trim().replace(/,$/, '')
     if (email && /.+@.+\..+/.test(email) && !guests.includes(email)) {
@@ -69,30 +263,21 @@ function EditorForm() {
     setGuestInput('')
   }
 
-  const close = () => (editor.value = null)
-
-  async function save(e: Event) {
-    e.preventDefault()
-    let startMs: number, endMs: number
+  async function save(e?: Event) {
+    e?.preventDefault()
+    let s: number, en: number
     if (allDay) {
-      startMs = startOfDay(new Date(parseLocal(startDate, '00:00'))).getTime()
-      endMs = startOfDay(new Date(parseLocal(endDate, '00:00'))).getTime() + DAY // exclusive
-      if (endMs <= startMs) endMs = startMs + DAY
+      s = startOfDay(new Date(startMs)).getTime()
+      en = startOfDay(new Date(endMs)).getTime() + DAY // exclusive
+      if (en <= s) en = s + DAY
     } else {
-      startMs = parseLocal(startDate, startTime)
-      endMs = parseLocal(endDate, endTime)
-      if (endMs <= startMs) endMs = startMs + 15 * 60_000
+      s = startMs
+      en = endMs > startMs ? endMs : startMs + 15 * MIN
     }
-    const start = toGTime(startMs, allDay)
-    const end = toGTime(endMs, allDay)
-
+    const start = toGTime(s, allDay)
+    const end = toGTime(en, allDay)
     const meetRequest = addMeet
-      ? {
-          createRequest: {
-            requestId: crypto.randomUUID(),
-            conferenceSolutionKey: { type: 'hangoutsMeet' },
-          },
-        }
+      ? { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } } }
       : undefined
 
     if (st.mode === 'create') {
@@ -102,7 +287,7 @@ function EditorForm() {
       if (description) fields.description = description
       if (guests.length) fields.attendees = guests.map((email) => ({ email }))
       if (meetRequest) fields.conferenceData = meetRequest
-      const rule = presetRule(repeat, new Date(startMs))
+      const rule = presetRule(repeat, new Date(s))
       if (rule) fields.recurrence = rule
       if (colorId) fields.colorId = colorId
       await createEvent(calendarId, fields)
@@ -111,25 +296,23 @@ function EditorForm() {
       if (summary !== st.summary) patch.summary = summary
       if (location !== st.location) patch.location = location
       if (description !== st.description) patch.description = description
-      if (startMs !== st.startMs || endMs !== st.endMs || allDay !== st.allDay) {
+      if (s !== st.startMs || en !== st.endMs || allDay !== st.allDay) {
         patch.start = start
         patch.end = end
       }
       const origEmails = (st.original.attendees ?? []).map((a) => a.email).filter(Boolean)
       if (JSON.stringify(guests) !== JSON.stringify(origEmails)) {
-        // Preserve existing attendee objects (responses) for retained guests.
         patch.attendees = guests.map(
           (email): GAttendee => st.original!.attendees?.find((a) => a.email === email) ?? { email },
         )
       }
       if (meetRequest) patch.conferenceData = meetRequest
       if (colorId !== (st.original.colorId ?? '')) {
-        // Empty string = revert to calendar default (null clears it server-side).
         patch.colorId = (colorId || null) as unknown as string
       }
       if (Object.keys(patch).length) {
         const scope = await askScope(st.original, 'edit')
-        if (!scope) return // keep the editor open
+        if (!scope) return
         await patchEventScoped(st.original, patch, scope)
       }
     }
@@ -151,13 +334,16 @@ function EditorForm() {
   return (
     <div class="overlay" onClick={close}>
       <form
-        class="panel editor"
+        class="panel editor editor-lg"
         onClick={(e) => e.stopPropagation()}
         onSubmit={save}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
             e.stopPropagation()
             close()
+          } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault()
+            void save()
           }
         }}
       >
@@ -167,7 +353,38 @@ function EditorForm() {
           placeholder="Event title"
           value={summary}
           onInput={(e) => setSummary(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            // Enter from the title jumps to the start date (Enter saves later).
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              ;(e.currentTarget.form?.querySelector('.date-input') as HTMLElement | null)?.focus()
+            }
+          }}
         />
+
+        <div class="when-grid">
+          <div class="when-col">
+            <div class="when-label">Starts</div>
+            <div class="when-fields">
+              <DateField ms={startMs} label="Start date" onCommit={(d) => moveStart(withDate(startMs, d))} />
+              {!allDay && (
+                <TimeField ms={startMs} label="Start time" onCommit={(m) => moveStart(withMinutes(startMs, m))} />
+              )}
+            </div>
+            <MiniMonth valueMs={startMs} onPick={(d) => moveStart(withDate(startMs, d))} />
+          </div>
+          <div class="when-col">
+            <div class="when-label">Ends</div>
+            <div class="when-fields">
+              <DateField ms={endMs} label="End date" onCommit={(d) => moveEnd(withDate(endMs, d))} />
+              {!allDay && (
+                <TimeField ms={endMs} label="End time" onCommit={(m) => moveEnd(withMinutes(endMs, m))} />
+              )}
+            </div>
+            <MiniMonth valueMs={endMs} onPick={(d) => moveEnd(withDate(endMs, d))} />
+          </div>
+        </div>
+
         <div class="editor-row">
           <label class="editor-check">
             <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.currentTarget.checked)} />
@@ -184,18 +401,24 @@ function EditorForm() {
               </option>
             ))}
           </select>
+          {st.mode === 'create' && (
+            <select value={repeat} onChange={(e) => setRepeat(e.currentTarget.value as RecurrencePreset)}>
+              {PRESETS.map((p) => (
+                <option key={p} value={p}>
+                  {presetLabel(p, new Date(startMs))}
+                </option>
+              ))}
+            </select>
+          )}
+          {st.mode === 'edit' && st.original?.recurringEventId && <span class="muted">↻ Recurring</span>}
+          {!st.original?.hangoutLink && (
+            <label class="editor-check">
+              <input type="checkbox" checked={addMeet} onChange={(e) => setAddMeet(e.currentTarget.checked)} />
+              Google Meet
+            </label>
+          )}
         </div>
-        <div class="editor-row">
-          <input type="date" value={startDate} onInput={(e) => {
-            const v = e.currentTarget.value
-            if (endDate < v) setEndDate(v)
-            setStartDate(v)
-          }} />
-          {!allDay && <input type="time" value={startTime} onInput={(e) => setStartTime(e.currentTarget.value)} />}
-          <span class="editor-dash">–</span>
-          {!allDay && <input type="time" value={endTime} onInput={(e) => setEndTime(e.currentTarget.value)} />}
-          <input type="date" value={endDate} onInput={(e) => setEndDate(e.currentTarget.value)} />
-        </div>
+
         <div class="guest-box">
           {guests.map((g) => (
             <span key={g} class="guest-chip">
@@ -230,29 +453,11 @@ function EditorForm() {
               ))}
           </datalist>
         </div>
-        {st.mode === 'create' && (
-          <div class="editor-row">
-            <select value={repeat} onChange={(e) => setRepeat(e.currentTarget.value as RecurrencePreset)}>
-              {PRESETS.map((p) => (
-                <option key={p} value={p}>
-                  {presetLabel(p, new Date(parseLocal(startDate, startTime)))}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        {st.mode === 'edit' && st.original?.recurringEventId && (
-          <div class="editor-row muted">↻ Part of a recurring series</div>
-        )}
-        {!st.original?.hangoutLink && (
-          <label class="editor-check">
-            <input type="checkbox" checked={addMeet} onChange={(e) => setAddMeet(e.currentTarget.checked)} />
-            Add Google Meet video conferencing
-          </label>
-        )}
+
         <div class="color-picker">
           <button
             type="button"
+            tabIndex={-1}
             class={'color-dot default' + (colorId === '' ? ' sel' : '')}
             title="Calendar default"
             style={{ '--dot': calendarById.value.get(calendarId)?.backgroundColor ?? 'var(--accent)' }}
@@ -262,6 +467,7 @@ function EditorForm() {
             <button
               key={c.id}
               type="button"
+              tabIndex={-1}
               class={'color-dot' + (colorId === c.id ? ' sel' : '')}
               title={c.label ?? c.name}
               style={{ '--dot': c.hex }}
@@ -272,6 +478,7 @@ function EditorForm() {
             {colorId ? (EVENT_COLORS[colorId]?.label ?? EVENT_COLORS[colorId]?.name) : 'Calendar color'}
           </span>
         </div>
+
         <input
           class="editor-field"
           placeholder="Location"
@@ -292,10 +499,11 @@ function EditorForm() {
             </button>
           )}
           <div class="spacer" />
+          <span class="muted editor-hint">⌘↵ to save</span>
           <button type="button" class="btn" onClick={close}>
             Cancel
           </button>
-          <button type="submit" class="btn accent">
+          <button type="submit" class="btn accent" data-save>
             Save
           </button>
         </div>

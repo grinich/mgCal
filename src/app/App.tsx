@@ -13,6 +13,7 @@ import { RecurrenceScopeDialog } from './event/RecurrenceScopeDialog'
 import { SearchOverlay } from './search/SearchOverlay'
 import { OverflowPopover } from './views/OverflowPopover'
 import { DropZone } from './DropZone'
+import { SyncDebug } from './SyncDebug'
 import { Toasts } from './Toasts'
 
 export function App() {
@@ -44,6 +45,7 @@ export function App() {
       <RecurrenceScopeDialog />
       <SearchOverlay />
       <OverflowPopover />
+      <SyncDebug />
       <DropZone />
       <Toasts />
     </div>

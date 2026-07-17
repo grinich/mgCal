@@ -1,6 +1,6 @@
 import { computed, effect, signal } from '@preact/signals'
 import { db, eventsInRange } from '../../data/db'
-import type { CalendarRow, EventRow } from '../../data/types'
+import type { CalendarRow, EventRow, SyncStateRow } from '../../data/types'
 import { addDays, addMonths, DAY, HOUR, isSameDay, MIN, startOfDay, startOfWeek } from '../time'
 
 export type View = 'day' | 'week' | 'month'
@@ -28,6 +28,32 @@ export const overflowList = signal<{
 export const helpOpen = signal<boolean>(false)
 export const settingsOpen = signal<boolean>(false)
 export const searchOpen = signal<boolean>(false)
+export const debugOpen = signal<boolean>(false)
+
+// ---------- sync status (drives the header badge + debug panel) ----------
+
+export const syncStates = signal<SyncStateRow[]>([])
+export const outboxCount = signal<number>(0)
+
+export async function refreshSyncMeta(): Promise<void> {
+  const d = await db()
+  syncStates.value = (await d.getAll('syncState')).filter((s) => s.calendarId !== '$global')
+  outboxCount.value = await d.count('outbox')
+}
+
+export async function setCalendarsHidden(ids: string[], hidden: boolean): Promise<void> {
+  const d = await db()
+  const tx = d.transaction('calendars', 'readwrite')
+  for (const id of ids) {
+    const cal = await tx.store.get(id)
+    if (cal) {
+      cal.hidden = hidden
+      await tx.store.put(cal)
+    }
+  }
+  await tx.done
+  await refreshCalendars()
+}
 export const weekStart = signal<0 | 1>(localStorage.getItem('weekStart') === '1' ? 1 : 0)
 
 export function setWeekStart(n: 0 | 1): void {
@@ -223,11 +249,20 @@ export function initApp(): void {
     }
     if (msg?.type !== 'db-updated') return
     void refreshEvents()
+    void refreshSyncMeta()
     if (msg.calendarIds?.includes('$calendars')) void refreshCalendars()
   })
   void import('./conflicts').then((m) => m.loadConflicts())
 
-  window.addEventListener('gcal-local-write', () => void refreshEvents())
+  window.addEventListener('gcal-local-write', () => {
+    void refreshEvents()
+    void refreshSyncMeta()
+  })
+
+  void refreshSyncMeta()
+  setInterval(() => {
+    if (document.visibilityState === 'visible') void refreshSyncMeta()
+  }, 2500)
 
   void chrome.storage.local.get('authNeeded').then((v) => (authNeeded.value = !!v.authNeeded))
   chrome.storage.onChanged.addListener((changes) => {
