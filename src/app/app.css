@@ -205,6 +205,17 @@
 }
 .chip-loc:hover, .chip-card-loc:hover { text-decoration: underline; opacity: 1; }
 .chip-card-loc { display: block; color: inherit; text-decoration: none; }
+.chip-card-rsvp { display: flex; align-items: center; gap: 5px; margin: 5px 0 2px; }
+.chip-rsvp-label { font-size: 10px; opacity: 0.8; margin-right: 2px; }
+.chip-rsvp-btn {
+  font: inherit; font-size: 10px; font-weight: 600;
+  color: inherit; background: transparent;
+  border: 1px solid currentColor; border-radius: 10px;
+  padding: 1px 9px; cursor: pointer; opacity: 0.85;
+}
+.chip-rsvp-btn:hover { opacity: 1; }
+.chip-rsvp-btn.active { background: var(--ct, #fff); color: var(--c); border-color: transparent; opacity: 1; }
+.chip.needs-action .chip-rsvp-btn.active, .chip.declined .chip-rsvp-btn.active { background: var(--c); color: var(--bg); }
 .peek-loc-link { color: var(--text); text-decoration: none; }
 .peek-loc-link:hover { color: var(--accent); text-decoration: underline; }
 .chip.pending::after, .lane-chip.pending::after {
@@ -478,6 +489,31 @@
 .scope-panel { width: 320px; }
 .scope-btns { display: flex; flex-direction: column; gap: 6px; }
 .scope-btns .btn { text-align: left; padding: 8px 12px; }
+
+/* ---------- ICS drop splash ---------- */
+.drop-splash {
+  position: fixed; inset: 0; z-index: 90;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg) 70%);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 28px; pointer-events: none;
+}
+.drop-box {
+  width: 100%; height: 100%;
+  border: 3px dashed var(--accent); border-radius: 20px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+.drop-emoji { font-size: 56px; }
+.drop-title { font-size: 24px; font-weight: 700; letter-spacing: -0.3px; }
+.drop-sub { color: var(--text-muted); font-size: 14px; }
+.drop-notice {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 90; background: var(--text); color: var(--bg);
+  border-radius: 10px; padding: 10px 18px; font-weight: 600;
+  box-shadow: var(--shadow);
+}
 
 /* ---------- toasts ---------- */
 .toasts {

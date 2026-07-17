@@ -1,3 +1,4 @@
+import { rsvpEvent } from '../../data/outbox'
 import type { EventRow } from '../../data/types'
 import { eventColorHex, textOnColor } from '../colors'
 import { cleanLocation, locationHref } from '../location'
@@ -128,6 +129,27 @@ export function EventChip({
           {fmtTime(ev.startMs)} – {fmtTime(ev.endMs)}
         </div>
         {ev.location && <LocationLink loc={ev.location} cls="chip-card-loc" />}
+        {self && (
+          <div
+            class="chip-card-rsvp"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span class="chip-rsvp-label">Going?</span>
+            <button
+              class={'chip-rsvp-btn' + (self.responseStatus === 'accepted' ? ' active' : '')}
+              onClick={() => void rsvpEvent(ev, 'accepted')}
+            >
+              Yes
+            </button>
+            <button
+              class={'chip-rsvp-btn' + (declined ? ' active' : '')}
+              onClick={() => void rsvpEvent(ev, 'declined')}
+            >
+              No
+            </button>
+          </div>
+        )}
       </div>
       {geom && canEdit(ev) && (
         <div class="resize-handle" onPointerDown={(e) => startEventDrag(e, ev, 'resize', geom)} />

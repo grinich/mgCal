@@ -7,6 +7,9 @@ import { newEventId } from './ids'
 import type { EventRow, GDateTime, GEvent, OutboxOp, SplitPayload } from './types'
 
 function kick(): void {
+  // Let open views repaint the optimistic write immediately (the SW broadcast
+  // arrives later, after the flush), then wake the worker.
+  dispatchEvent(new Event('gcal-local-write'))
   chrome.runtime.sendMessage({ type: 'kick' }).catch(() => {})
 }
 

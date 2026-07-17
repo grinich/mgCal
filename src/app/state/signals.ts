@@ -227,6 +227,8 @@ export function initApp(): void {
   })
   void import('./conflicts').then((m) => m.loadConflicts())
 
+  window.addEventListener('gcal-local-write', () => void refreshEvents())
+
   void chrome.storage.local.get('authNeeded').then((v) => (authNeeded.value = !!v.authNeeded))
   chrome.storage.onChanged.addListener((changes) => {
     if ('authNeeded' in changes) authNeeded.value = !!changes.authNeeded?.newValue
