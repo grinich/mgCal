@@ -1,5 +1,5 @@
 import type { EventRow } from '../../data/types'
-import { DAY, HOUR, hourH } from '../time'
+import { addDays, DAY, HOUR, hourH } from '../time'
 
 export interface Positioned {
   ev: EventRow
@@ -125,18 +125,26 @@ export interface Lane {
   clipsRight: boolean
 }
 
-/** All-day / multi-day chips across a row of `numDays` starting at rowStartMs. */
-export function layoutLanes(events: EventRow[], rowStartMs: number, numDays: number): Lane[] {
-  const rowEndMs = rowStartMs + numDays * DAY
+/** All-day / multi-day chips across a row of day columns. Columns come from
+ * real day boundaries (not rowStartMs + n*DAY), so DST-length days don't
+ * shift chips into the wrong column. */
+export function layoutLanes(events: EventRow[], days: Date[]): Lane[] {
+  const numDays = days.length
+  // bounds[i] = start of column i; bounds[numDays] = end of the row
+  const bounds = [...days.map((d) => d.getTime()), addDays(days[numDays - 1]!, 1).getTime()]
+  const rowStartMs = bounds[0]!
+  const rowEndMs = bounds[numDays]!
   const items = events
     .filter((e) => e.startMs < rowEndMs && e.endMs > rowStartMs)
     .sort((a, b) => a.startMs - b.startMs || b.endMs - a.endMs)
   const laneEnds: number[] = []
   const out: Lane[] = []
   for (const ev of items) {
-    const startCol = Math.max(0, Math.floor((ev.startMs - rowStartMs) / DAY))
+    let startCol = 0
+    while (startCol < numDays - 1 && ev.startMs >= bounds[startCol + 1]!) startCol++
     // exclusive end; timed multi-day events round up to whole days
-    const endCol = Math.min(numDays, Math.ceil((ev.endMs - rowStartMs) / DAY))
+    let endCol = startCol + 1
+    while (endCol < numDays && bounds[endCol]! < ev.endMs) endCol++
     let lane = 0
     while ((laneEnds[lane] ?? -1) > startCol - 1) lane++
     laneEnds[lane] = endCol - 1

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'preact/hooks'
 import type { EventRow } from '../../data/types'
 import { calendarById, nowMs, openEdit, overflowList, selectedKey } from '../state/signals'
-import { DAY, DOW, defaultScrollTop, fmtTime, fmtTimeShort, HOUR, hourH, isSameDay, setHourH } from '../time'
+import { addDays, DAY, DOW, defaultScrollTop, fmtTime, fmtTimeShort, HOUR, hourH, isSameDay, setHourH } from '../time'
 import { layoutDay, layoutLanes, splitAllDay } from './layout'
 import { chipTextColor } from '../colors'
 import { chipColor, EventChip, eventKey, isDeclined, toggleSelect } from './EventChip'
@@ -53,8 +53,7 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
     timeAt: (e) => makeGeom(innerRef.current!, days, GUTTER_PX).timeAt(e),
   }
 
-  const rowStartMs = days[0]!.getTime()
-  const lanes = layoutLanes(allDay, rowStartMs, days.length)
+  const lanes = layoutLanes(allDay, days)
   const laneCount = lanes.length ? Math.max(...lanes.map((l) => l.lane)) + 1 : 0
   const cols = `var(--gutter) repeat(${days.length}, 1fr)`
 
@@ -152,7 +151,7 @@ function DayColumn({
   maxCols: number
 }) {
   const dayStartMs = day.getTime()
-  const dayEndMs = dayStartMs + DAY
+  const dayEndMs = addDays(day, 1).getTime() // real day end — DST days aren't 24h
   const now = nowMs.value
   const isToday = isSameDay(day, new Date(now))
   const dayEvents = events.filter((e) => e.startMs < dayEndMs && e.endMs > dayStartMs)

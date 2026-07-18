@@ -1,6 +1,6 @@
 import type { EventRow } from '../../data/types'
 import { anchor, range, selectedKey, setAnchor, setView, weekStart } from '../state/signals'
-import { DAY, DOW, fmtTimeShort, isSameDay } from '../time'
+import { addDays, DAY, DOW, fmtTimeShort, isSameDay } from '../time'
 import { chipTextColor } from '../colors'
 import { chipColor, eventKey, isDeclined, toggleSelect } from './EventChip'
 
@@ -13,13 +13,19 @@ export function MonthView({ events }: { events: EventRow[] }) {
   const today = new Date()
   const month = anchor.value.getMonth()
 
+  // Real calendar-day steps, NOT startMs + i*DAY: fixed 24h increments drift
+  // across DST transitions (the fall-back day is 25h long), which duplicated
+  // the transition date and shifted every later cell.
+  const gridStart = new Date(r.startMs)
   const days: { date: Date; events: EventRow[] }[] = []
   for (let i = 0; i < numDays; i++) {
-    const startMs = r.startMs + i * DAY
+    const date = addDays(gridStart, i)
+    const startMs = date.getTime()
+    const endMs = addDays(gridStart, i + 1).getTime()
     days.push({
-      date: new Date(startMs),
+      date,
       events: events
-        .filter((e) => e.startMs < startMs + DAY && e.endMs > startMs)
+        .filter((e) => e.startMs < endMs && e.endMs > startMs)
         .sort((a, b) => Number(!!b.allDay) - Number(!!a.allDay) || a.startMs - b.startMs),
     })
   }
