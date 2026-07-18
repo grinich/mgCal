@@ -307,7 +307,15 @@ body.ev-dragging .chip, body.ev-dragging .day-col { cursor: grabbing; }
   text-align: center; font-size: 10px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted);
 }
-.month-grid { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); min-height: 0; }
+.month-grid { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.month-week {
+  flex: 1; min-height: 0; position: relative;
+  display: grid; grid-template-columns: repeat(7, 1fr);
+}
+.month-lanes { position: absolute; inset: 0; pointer-events: none; }
+.month-span {
+  position: absolute; height: 16px; z-index: 2; pointer-events: auto;
+}
 .month-cell {
   border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
   padding: 2px 3px; overflow: hidden; display: flex; flex-direction: column; gap: 1px;
@@ -486,16 +494,41 @@ body.ev-dragging .chip, body.ev-dragging .day-col { cursor: grabbing; }
 }
 
 /* ---------- color picker ---------- */
-.color-picker { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-.color-dot {
-  width: 17px; height: 17px; border-radius: 50%;
-  background: var(--dot); border: none; cursor: pointer; padding: 0;
-  transition: transform 0.08s;
+/* Event category pills (color palette + the user's category names). */
+.cat-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.cat-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 11.5px; color: var(--text-muted);
+  background: none; border: 1px solid var(--border); border-radius: 12px;
+  padding: 3px 10px 3px 7px; cursor: pointer;
 }
-.color-dot:hover { transform: scale(1.18); }
-.color-dot.sel { outline: 2px solid var(--text); outline-offset: 2px; }
-.color-dot.default { box-shadow: inset 0 0 0 2px var(--bg), inset 0 0 0 3.5px var(--dot); }
-.color-label { font-size: 12px; margin-left: 2px; }
+.cat-pill:hover { border-color: var(--border-strong); color: var(--text); }
+.cat-pill.sel {
+  color: var(--text); border-color: transparent;
+  background: color-mix(in srgb, var(--dot) 18%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--dot);
+}
+.cat-pill-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dot); flex: none; }
+
+/* 15-minute time dropdown under the editor's time inputs. */
+.time-field { position: relative; }
+.time-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
+  width: 108px; max-height: 208px; overflow-y: auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24); padding: 3px;
+}
+.time-opt {
+  display: block; width: 100%; text-align: left;
+  font: inherit; font-size: 12px; color: var(--text);
+  background: none; border: none; border-radius: 5px;
+  padding: 4px 8px; cursor: pointer;
+}
+.time-opt:hover { background: var(--surface); }
+.time-opt.sel {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent); font-weight: 600;
+}
 
 .peek-color-tag { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; }
 .peek-color-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); display: inline-block; }
@@ -752,6 +785,10 @@ kbd {
 
 /* ---------- large editor with inline pickers ---------- */
 .editor-lg { width: 760px; max-width: 94vw; max-height: 92vh; overflow-y: auto; }
+/* Without this, hitting max-height makes the flex children SHRINK to fit
+ * (the description collapses to a sliver) instead of overflowing — which
+ * leaves nothing to scroll. */
+.editor > * { flex: none; }
 .when-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .when-label {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;

@@ -4,8 +4,7 @@
 ;(function () {
   var now = new Date()
   var view = localStorage.getItem('view') || 'week'
-  var anchor = new Date(localStorage.getItem('anchor') || now)
-  if (isNaN(anchor)) anchor = now
+  var anchor = now // new tabs always open on today, matching the live app
   if (view === 'month') {
     // Month view has a different shape; keep just the header, no week skeleton.
     document.getElementById('sk-days').style.display = 'none'

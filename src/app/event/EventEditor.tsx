@@ -71,13 +71,30 @@ function fmtDateText(ms: number): string {
 
 // ---------- field components ----------
 
+const TIME_OPTS = Array.from({ length: 96 }, (_, i) => {
+  const minutes = i * 15
+  return { minutes, label: fmtTime(new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60).getTime()) }
+})
+
 function TimeField({ ms, onCommit, label }: { ms: number; onCommit: (minutes: number) => void; label: string }) {
   const [text, setText] = useState(fmtTime(ms))
   const [bad, setBad] = useState(false)
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     setText(fmtTime(ms))
     setBad(false)
   }, [ms])
+
+  // Highlight the 15-min option nearest what's typed (or the current value)
+  // and keep it scrolled into view while the menu is open.
+  const cur = new Date(ms)
+  const target = parseTimeText(text) ?? cur.getHours() * 60 + cur.getMinutes()
+  const nearest = (Math.round(target / 15) * 15) % (24 * 60)
+  useEffect(() => {
+    if (open) menuRef.current?.querySelector('.sel')?.scrollIntoView({ block: 'center' })
+  }, [open, nearest])
+
   const commit = () => {
     const mins = parseTimeText(text)
     if (mins == null) {
@@ -89,21 +106,56 @@ function TimeField({ ms, onCommit, label }: { ms: number; onCommit: (minutes: nu
     }
   }
   return (
-    <input
-      class={'field-input time-input' + (bad ? ' bad' : '')}
-      value={text}
-      aria-label={label}
-      onInput={(e) => setText(e.currentTarget.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault()
+    <div class="time-field">
+      <input
+        class={'field-input time-input' + (bad ? ' bad' : '')}
+        value={text}
+        aria-label={label}
+        onInput={(e) => {
+          setText(e.currentTarget.value)
+          setOpen(true)
+        }}
+        onBlur={() => {
+          setOpen(false)
           commit()
-          ;(e.currentTarget.form?.querySelector('[data-save]') as HTMLElement | null)?.focus()
-        }
-      }}
-      onFocus={(e) => e.currentTarget.select()}
-    />
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            setOpen(false)
+            commit()
+            ;(e.currentTarget.form?.querySelector('[data-save]') as HTMLElement | null)?.focus()
+          } else if (e.key === 'Escape' && open) {
+            e.stopPropagation() // close the menu, not the editor
+            setOpen(false)
+          }
+        }}
+        onFocus={(e) => {
+          e.currentTarget.select()
+          setOpen(true)
+        }}
+      />
+      {open && (
+        <div class="time-menu" ref={menuRef}>
+          {TIME_OPTS.map((o) => (
+            <button
+              key={o.minutes}
+              type="button"
+              tabIndex={-1}
+              class={'time-opt' + (o.minutes === nearest ? ' sel' : '')}
+              // pointerdown beats the input's blur, so the pick lands first
+              onPointerDown={(e) => {
+                e.preventDefault()
+                setOpen(false)
+                onCommit(o.minutes)
+              }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -224,7 +276,6 @@ function EditorForm() {
     (st.original?.attendees ?? []).map((a) => a.email).filter(Boolean),
   )
   const [guestInput, setGuestInput] = useState('')
-  const [addMeet, setAddMeet] = useState(false)
   const [repeat, setRepeat] = useState<RecurrencePreset>('none')
   const [colorId, setColorId] = useState<string>(st.original?.colorId ?? '')
   const [knownEmails, setKnownEmails] = useState<string[]>([])
@@ -276,9 +327,6 @@ function EditorForm() {
     }
     const start = toGTime(s, allDay)
     const end = toGTime(en, allDay)
-    const meetRequest = addMeet
-      ? { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } } }
-      : undefined
 
     if (st.mode === 'create') {
       const fields: Partial<GEvent> & { start: GDateTime; end: GDateTime } = { start, end }
@@ -286,7 +334,6 @@ function EditorForm() {
       if (location) fields.location = location
       if (description) fields.description = description
       if (guests.length) fields.attendees = guests.map((email) => ({ email }))
-      if (meetRequest) fields.conferenceData = meetRequest
       const rule = presetRule(repeat, new Date(s))
       if (rule) fields.recurrence = rule
       if (colorId) fields.colorId = colorId
@@ -306,7 +353,6 @@ function EditorForm() {
           (email): GAttendee => st.original!.attendees?.find((a) => a.email === email) ?? { email },
         )
       }
-      if (meetRequest) patch.conferenceData = meetRequest
       if (colorId !== (st.original.colorId ?? '')) {
         patch.colorId = (colorId || null) as unknown as string
       }
@@ -411,12 +457,6 @@ function EditorForm() {
             </select>
           )}
           {st.mode === 'edit' && st.original?.recurringEventId && <span class="muted">↻ Recurring</span>}
-          {!st.original?.hangoutLink && (
-            <label class="editor-check">
-              <input type="checkbox" checked={addMeet} onChange={(e) => setAddMeet(e.currentTarget.checked)} />
-              Google Meet
-            </label>
-          )}
         </div>
 
         <div class="guest-box">
@@ -454,29 +494,31 @@ function EditorForm() {
           </datalist>
         </div>
 
-        <div class="color-picker">
+        {/* Event categories: the color palette with the user's category names. */}
+        <div class="cat-row">
           <button
             type="button"
             tabIndex={-1}
-            class={'color-dot default' + (colorId === '' ? ' sel' : '')}
-            title="Calendar default"
+            class={'cat-pill' + (colorId === '' ? ' sel' : '')}
             style={{ '--dot': calendarById.value.get(calendarId)?.backgroundColor ?? 'var(--accent)' }}
             onClick={() => setColorId('')}
-          />
+          >
+            <span class="cat-pill-dot" />
+            Calendar color
+          </button>
           {Object.values(EVENT_COLORS).map((c) => (
             <button
               key={c.id}
               type="button"
               tabIndex={-1}
-              class={'color-dot' + (colorId === c.id ? ' sel' : '')}
-              title={c.label ?? c.name}
+              class={'cat-pill' + (colorId === c.id ? ' sel' : '')}
               style={{ '--dot': c.hex }}
               onClick={() => setColorId(c.id)}
-            />
+            >
+              <span class="cat-pill-dot" />
+              {c.label ?? c.name}
+            </button>
           ))}
-          <span class="color-label muted">
-            {colorId ? (EVENT_COLORS[colorId]?.label ?? EVENT_COLORS[colorId]?.name) : 'Calendar color'}
-          </span>
         </div>
 
         <input

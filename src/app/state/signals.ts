@@ -5,14 +5,9 @@ import { addDays, addMonths, DAY, HOUR, isSameDay, MIN, startOfDay, startOfWeek 
 
 export type View = 'day' | 'week' | 'month'
 
-function initialAnchor(): Date {
-  const raw = localStorage.getItem('anchor')
-  const d = raw ? new Date(raw) : new Date()
-  return isNaN(d.getTime()) ? new Date() : d
-}
-
 export const view = signal<View>((localStorage.getItem('view') as View) || 'week')
-export const anchor = signal<Date>(initialAnchor())
+// Every new tab opens on today; navigation only lasts for the tab's lifetime.
+export const anchor = signal<Date>(new Date())
 export const calendars = signal<CalendarRow[]>([])
 export const events = signal<EventRow[]>([])
 export const nowMs = signal<number>(Date.now())
@@ -207,7 +202,6 @@ export function setView(v: View): void {
 
 export function setAnchor(d: Date): void {
   anchor.value = d
-  localStorage.setItem('anchor', startOfDay(d).toISOString())
 }
 
 export function goToday(): void {
