@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "mgCal",
   "description": "Instant local-first Google Calendar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt82nXXf2yelvq7tR/Sg8zap2Z3THKk10Ncv/1JsBFkQRdYg9sZ98ZbxYDnlbDcc9s4x6J3D4kGgpBe4WOHJnulDlH51D0+brrYQ24Ujm47Zhe4FAthM+qW6U/HQsQ0DBnlZPpFEJTUTv3TglEqDRkvwAfwjEcMqxf3OMBXxsPqNWkOMsu7/WARPbpHEsQxt5YtLqk8/LF1MV2VyjPn4ty7+lolgzV/d0yplNekrTW8JQ3bIqDevxofTrxvtKbC7xR2ZFqKas35lRAU8g1g8RfvctATnFzP8KZpYKpU+Y/rZVZN38LfhO7uR/gLbhSYxt1wBPLdVjK0KukQjIrEzexQIDAQAB",
   "background": { "service_worker": "sw.js", "type": "module" },
   "chrome_url_overrides": { "newtab": "index.html" },
