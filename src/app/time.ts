@@ -1,7 +1,30 @@
+import { signal } from '@preact/signals'
+
 export const MIN = 60_000
 export const HOUR = 3600_000
 export const DAY = 24 * HOUR
-export const HOUR_H = 56 // px per hour, must match --hour-h
+
+// px per hour — adjustable with a trackpad pinch on the grid. The static
+// skeleton (index.html --hour-h) assumes the 56px default; TimeGrid overrides
+// the var inline once hydrated. localStorage is absent in the service worker,
+// hence the optional chaining.
+const HOUR_H_MIN = 28
+const HOUR_H_MAX = 140
+const HOUR_H_DEFAULT = 56
+
+function loadHourH(): number {
+  const n = Number(globalThis.localStorage?.getItem('hourH'))
+  return n >= HOUR_H_MIN && n <= HOUR_H_MAX ? n : HOUR_H_DEFAULT
+}
+
+export const hourH = signal<number>(loadHourH())
+
+export function setHourH(px: number): void {
+  const v = Math.round(Math.min(HOUR_H_MAX, Math.max(HOUR_H_MIN, px)) * 2) / 2
+  if (v === hourH.value) return
+  hourH.value = v
+  localStorage.setItem('hourH', String(v))
+}
 
 export function startOfDay(d: Date): Date {
   const r = new Date(d)
@@ -57,9 +80,9 @@ export const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 export function defaultScrollTop(todayVisible: boolean): number {
   if (todayVisible) {
     const now = new Date()
-    return Math.max(0, (now.getHours() + now.getMinutes() / 60) * HOUR_H - 180)
+    return Math.max(0, (now.getHours() + now.getMinutes() / 60) * hourH.value - 180)
   }
-  return 8 * HOUR_H - 8
+  return 8 * hourH.value - 8
 }
 
 export function relTime(ms: number): string {

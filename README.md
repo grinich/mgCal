@@ -43,4 +43,4 @@ After a rebuild, click the reload icon for the extension on `chrome://extensions
 
 ## Keyboard shortcuts
 
-`t` today · `d`/`w`/`m` day/week/month view · `j`/`k` next/prev period · `c` create event · `/` search · `e` open selected · `⌘↵` join current Zoom · `Esc` close · `?` help
+`t` today · `d`/`w`/`m` day/week/month view · `j`/`k` next/prev period · `c` create event · `/` search · `e` open selected · `⌘↵` join current Zoom · `Esc` close · `?` help · trackpad pinch zooms the time scale

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'preact/hooks'
 import type { EventRow } from '../../data/types'
 import { calendarById, nowMs, openEdit, overflowList, selectedKey } from '../state/signals'
-import { DAY, DOW, defaultScrollTop, fmtTime, fmtTimeShort, HOUR, HOUR_H, isSameDay } from '../time'
+import { DAY, DOW, defaultScrollTop, fmtTime, fmtTimeShort, HOUR, hourH, isSameDay, setHourH } from '../time'
 import { layoutDay, layoutLanes, splitAllDay } from './layout'
 import { chipTextColor } from '../colors'
 import { chipColor, EventChip, eventKey, isDeclined, toggleSelect } from './EventChip'
@@ -21,6 +21,33 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
     if (scrollRef.current) scrollRef.current.scrollTop = defaultScrollTop(todayVisible)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days[0]?.getTime(), days.length])
+
+  // Trackpad pinch (Chrome delivers it as ctrl+wheel) zooms the time scale:
+  // pinch in = shorter hours = more of the day visible. The time under the
+  // cursor stays put: scrollTop is re-derived after the grid re-renders at
+  // the new height (setting it immediately would clamp against the old one).
+  const pinchAnchor = useRef<{ y: number; frac: number } | null>(null)
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      const y = e.clientY - el.getBoundingClientRect().top
+      pinchAnchor.current = { y, frac: (el.scrollTop + y) / (24 * hourH.value) }
+      setHourH(hourH.value * Math.exp(-e.deltaY * 0.01))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    const a = pinchAnchor.current
+    if (el && a) {
+      pinchAnchor.current = null
+      el.scrollTop = a.frac * 24 * hourH.value - a.y
+    }
+  }, [hourH.value])
 
   const geom: GridGeom = {
     timeAt: (e) => makeGeom(innerRef.current!, days, GUTTER_PX).timeAt(e),
@@ -82,10 +109,14 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
       )}
 
       <div class="grid-scroll" ref={scrollRef}>
-        <div class="grid-inner" ref={innerRef} style={{ gridTemplateColumns: cols, height: `${24 * HOUR_H}px` }}>
+        <div
+          class="grid-inner"
+          ref={innerRef}
+          style={{ gridTemplateColumns: cols, height: `${24 * hourH.value}px`, '--hour-h': `${hourH.value}px` }}
+        >
           <div class="gutter">
             {Array.from({ length: 23 }, (_, i) => (
-              <div key={i} class="hour-label" style={{ top: `${(i + 1) * HOUR_H}px` }}>
+              <div key={i} class="hour-label" style={{ top: `${(i + 1) * hourH.value}px` }}>
                 {fmtTime(new Date(2000, 0, 1, i + 1).getTime())}
               </div>
             ))}
@@ -133,8 +164,8 @@ function DayColumn({
     const s = Math.max(d.startMs, dayStartMs)
     const e = Math.min(d.endMs, dayEndMs)
     ghost = {
-      top: ((s - dayStartMs) / HOUR) * HOUR_H,
-      height: Math.max(((e - s) / HOUR) * HOUR_H - 2, 12),
+      top: ((s - dayStartMs) / HOUR) * hourH.value,
+      height: Math.max(((e - s) / HOUR) * hourH.value - 2, 12),
       label:
         d.kind === 'event'
           ? `${d.ev.summary || '(no title)'} · ${fmtTimeShort(d.startMs)}–${fmtTime(d.endMs)}`
@@ -181,7 +212,7 @@ function DayColumn({
         </div>
       )}
       {isToday && (
-        <div class="now-line" style={{ top: `${((now - dayStartMs) / HOUR) * HOUR_H}px` }}>
+        <div class="now-line" style={{ top: `${((now - dayStartMs) / HOUR) * hourH.value}px` }}>
           <div class="now-dot" />
         </div>
       )}

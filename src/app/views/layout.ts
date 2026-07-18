@@ -1,5 +1,5 @@
 import type { EventRow } from '../../data/types'
-import { DAY, HOUR, HOUR_H } from '../time'
+import { DAY, HOUR, hourH } from '../time'
 
 export interface Positioned {
   ev: EventRow
@@ -49,7 +49,7 @@ export function layoutDay(
   let cluster: { ev: EventRow; start: number; end: number; col: number }[] = []
   let clusterEnd = -Infinity
 
-  const yOf = (ms: number) => ((ms - dayStartMs) / HOUR) * HOUR_H
+  const yOf = (ms: number) => ((ms - dayStartMs) / HOUR) * hourH.value
 
   const flush = () => {
     if (!cluster.length) return
