@@ -262,6 +262,21 @@ async function sweepStale(d: DB, calendarId: string, gen: number): Promise<numbe
   return removed
 }
 
+/** Force a fresh baseline of every calendar: clears sync tokens so the next
+ * pass re-fetches the full window and sweepStale drops orphaned rows (e.g. old
+ * instances left behind by a recurring retime/split). Non-destructive. */
+export async function forceRebaseline(): Promise<void> {
+  const d = await db()
+  for (const s of await d.getAll('syncState')) {
+    if (s.calendarId === '$global') continue
+    s.syncToken = undefined
+    s.pageToken = undefined
+    s.baselinedAt = undefined
+    s.phase = 'idle'
+    await d.put('syncState', s)
+  }
+}
+
 /** Re-apply Google's per-calendar "selected" visibility over local toggles. */
 export async function resetVisibilityFromGoogle(): Promise<void> {
   const d = await db()

@@ -66,6 +66,7 @@ function Panel() {
   const kickFull = () => void chrome.runtime.sendMessage({ type: 'kick', full: true }).catch(() => {})
   const resetVisibility = () =>
     void chrome.runtime.sendMessage({ type: 'resetVisibility' }).catch(() => {})
+  const rebuild = () => void chrome.runtime.sendMessage({ type: 'rebaseline' }).catch(() => {})
   const copyDebug = () => {
     void navigator.clipboard
       .writeText(
@@ -104,6 +105,9 @@ function Panel() {
           <div class="panel-title">Sync debug</div>
           <div class="spacer" />
           <button class="btn" onClick={kickFull}>Full sync now</button>
+          <button class="btn" title="Re-fetch everything from Google and drop orphaned events" onClick={rebuild}>
+            Rebuild from Google
+          </button>
           <button class="btn" title="Re-apply Google Calendar's show/hide selections" onClick={resetVisibility}>
             Match Google visibility
           </button>

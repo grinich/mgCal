@@ -1,7 +1,7 @@
 // All listeners must be registered synchronously at the top level so a
 // freshly-woken service worker re-attaches them before events dispatch.
 import { openApp } from './open-app'
-import { resetVisibilityFromGoogle, syncAll } from './sync'
+import { forceRebaseline, resetVisibilityFromGoogle, syncAll } from './sync'
 import { flushOutbox } from './flush'
 import { onNotificationButton, onNotificationClicked, onReminderAlarm, scheduleReminders } from './reminders'
 import { expandGroup } from './groups'
@@ -63,6 +63,15 @@ chrome.runtime.onMessage.addListener(
         () => sendResponse({ ok: true }),
         (e) => sendResponse({ ok: false, error: String(e) }),
       )
+      return true
+    }
+    if (msg?.type === 'rebaseline') {
+      forceRebaseline()
+        .then(() => syncAll('full'))
+        .then(
+          () => sendResponse({ ok: true }),
+          (e) => sendResponse({ ok: false, error: String(e) }),
+        )
       return true
     }
     if (msg?.type === 'kick') {

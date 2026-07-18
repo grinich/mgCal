@@ -91,7 +91,10 @@ async function opsFor(d: DB, calendarId: string, eventId: string): Promise<Outbo
 async function execOp(d: DB, op: OutboxOp): Promise<void> {
   if (op.opType === 'splitRecurring') {
     await execSplitRecurring(d, op)
-    await reconcileSiblings(d, op.calendarId, op.eventId)
+    // Truncating the old series drops its tail instances, but Google emits no
+    // `cancelled` for plain (non-exception) projections — so refetch the series
+    // to purge the orphaned local rows rather than just clearing pending flags.
+    await restoreSeries(d, op.calendarId, op.eventId)
     await d.delete('outbox', op.seq!)
     return
   }
@@ -185,7 +188,10 @@ async function execOp(d: DB, op: OutboxOp): Promise<void> {
   const isMaster = op.master || !!server?.recurrence?.length
   if (isMaster) {
     if (op.opType === 'create') await d.delete('events', [op.calendarId, op.eventId])
-    if (op.master) await reconcileSiblings(d, op.calendarId, op.eventId)
+    // A master retime changes every instance's id (occurrence start moves), and
+    // Google won't send `cancelled` for the vanished old-id projections — so
+    // refetch the series to drop orphans instead of only clearing pending.
+    if (op.master) await restoreSeries(d, op.calendarId, op.eventId)
   } else if (server) {
     if (!row) {
       // Deleted locally while this op was in flight: the event now exists on
@@ -345,38 +351,26 @@ async function execSplitRecurring(d: DB, op: OutboxOp): Promise<void> {
   }
 }
 
-/** After a master-level op lands: purge scope-deleted rows and unlock shifted
- * ones (unless a per-instance op still owns them). The next sync brings truth. */
-async function reconcileSiblings(d: DB, calendarId: string, masterId: string): Promise<void> {
-  const rows = (await d.getAllFromIndex('events', 'byMaster', IDBKeyRange.only(masterId))).filter(
-    (r) => r.calendarId === calendarId,
-  )
-  for (const row of rows) {
-    if (!row.pending) continue
-    const ownOps = await opsFor(d, calendarId, row.id)
-    if (ownOps.length) continue
-    if (row.pending === 'delete') {
-      await d.delete('events', [calendarId, row.id])
-    } else {
-      row.pending = undefined
-      await d.put('events', row)
-    }
-  }
-}
-
 async function purgeSiblings(d: DB, calendarId: string, masterId: string): Promise<void> {
   const rows = (await d.getAllFromIndex('events', 'byMaster', IDBKeyRange.only(masterId))).filter(
     (r) => r.calendarId === calendarId,
   )
-  for (const row of rows) await d.delete('events', [calendarId, row.id])
+  for (const row of rows) {
+    if ((await opsFor(d, calendarId, row.id)).length) continue // pending per-instance edit owns it
+    await d.delete('events', [calendarId, row.id])
+  }
 }
 
-/** After a failed master op, optimistic sibling edits are wrong and unchanged
- * server events won't be resent by incremental sync — refetch the series'
- * instances directly to restore local truth. */
+/** Refetch a series' instances and make the local rows match exactly. Used
+ * after a master op (success OR conflict): incremental sync alone can't fix it,
+ * because retiming/truncating a series changes which instance ids exist and
+ * Google emits no `cancelled` for the vanished plain projections — so stale
+ * local rows would orphan. Rows carrying their own pending per-instance op are
+ * left untouched (that edit hasn't flushed yet and owns its row). */
 async function restoreSeries(d: DB, calendarId: string, masterId: string): Promise<void> {
   const s = await d.get('syncState', calendarId)
   const gen = s?.baselineGen ?? 0
+  const hasOwnOp = async (id: string) => (await opsFor(d, calendarId, id)).length > 0
   const items: GEvent[] = []
   let pageToken: string | undefined
   try {
@@ -405,9 +399,10 @@ async function restoreSeries(d: DB, calendarId: string, masterId: string): Promi
     (r) => r.calendarId === calendarId,
   )
   for (const row of rows) {
-    if (!seen.has(row.id)) await d.delete('events', [calendarId, row.id])
+    if (!seen.has(row.id) && !(await hasOwnOp(row.id))) await d.delete('events', [calendarId, row.id])
   }
   for (const item of items) {
+    if (await hasOwnOp(item.id)) continue // a queued per-instance edit still owns this row
     if (item.status === 'cancelled') await d.delete('events', [calendarId, item.id])
     else await d.put('events', normalizeEvent(item, calendarId, gen))
   }
