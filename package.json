@@ -6,6 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "vite build && vite build -c vite.sw.config.ts",
+    "zip": "npm run build && rm -rf out mgcal-*.zip && mkdir -p out/mgcal && cp -R dist/. out/mgcal/ && cd out && zip -qr \"../mgcal-v${npm_package_version}-chrome.zip\" mgcal",
+    "version": "node scripts/sync-manifest-version.mjs && npm run build && git add public/manifest.json",
     "watch": "vite build --watch & vite build -c vite.sw.config.ts --watch",
     "typecheck": "tsc --noEmit",
     "dev": "vite"

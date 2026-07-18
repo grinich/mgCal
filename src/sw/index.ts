@@ -5,14 +5,19 @@ import { resetVisibilityFromGoogle, syncAll } from './sync'
 import { flushOutbox } from './flush'
 import { onNotificationButton, onNotificationClicked, onReminderAlarm, scheduleReminders } from './reminders'
 import { expandGroup } from './groups'
+import { checkForUpdate, ensureUpdateAlarm, UPDATE_ALARM } from './update-check'
 
 chrome.runtime.onInstalled.addListener(() => {
   void ensureAlarms()
+  void ensureUpdateAlarm()
+  void checkForUpdate()
   void syncAll('full').then(() => scheduleReminders(true))
 })
 
 chrome.runtime.onStartup.addListener(() => {
   void ensureAlarms()
+  void ensureUpdateAlarm()
+  void checkForUpdate()
   void syncAll('full').then(() => scheduleReminders(true))
 })
 
@@ -29,6 +34,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     void flushOutbox()
       .then(() => syncAll('full'))
       .then(() => scheduleReminders(true))
+  } else if (alarm.name === UPDATE_ALARM) {
+    void checkForUpdate()
   } else if (alarm.name.startsWith('rem|')) {
     void onReminderAlarm(alarm.name)
   }

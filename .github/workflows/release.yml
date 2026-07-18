@@ -1,0 +1,61 @@
+name: Release
+
+# Cut a release by pushing a version tag:
+#   npm version minor   # bumps package.json + manifest.json + creates the vX.Y.Z tag
+#   git push --follow-tags
+# Add the matching section to CHANGELOG.md first — it becomes the release notes.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # needed to create the GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Gate the release on the typecheck (no test suite yet).
+      - run: npm run typecheck
+
+      # Builds the extension and produces mgcal-v<version>-chrome.zip
+      - run: npm run zip
+
+      # Build the release body: this version's CHANGELOG section, then a standard
+      # "How to update" section. generate_release_notes appends the commit list.
+      - name: Build release notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            /^## \[/ { if (found) exit; if (index($0, "[" ver "]")) { found=1; next } }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          cat >> release-notes.md <<'HOWTO'
+
+          ## How to update
+
+          1. Download the `.zip` asset from this release and unzip it (replace your existing mgCal folder, or unzip a fresh copy).
+          2. Open `chrome://extensions`, find **mgCal**, and click the reload icon (↻). If you unzipped to a new folder, use **Load unpacked** and select it.
+
+          Prefer building from source? Run `git pull && npm install && npm run build`, then reload at `chrome://extensions`. Your calendars and settings are preserved across updates.
+
+          Not sure where mgCal is installed? Open `chrome://extensions` (turn on Developer mode) — the mgCal card shows the folder it's loaded from.
+          HOWTO
+          echo "Built release notes for v$VERSION"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          body_path: release-notes.md
+          generate_release_notes: true # appends an auto commit/PR changelog
+          files: mgcal-*.zip

@@ -44,6 +44,25 @@
 .seg:hover { color: var(--text); }
 .seg.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 
+/* ---------- update banner ---------- */
+.update-banner { flex: none; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 13px; }
+.update-row { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 12px; }
+.update-icon { color: var(--accent); font-weight: 700; }
+.update-link { font-size: 12px; padding: 2px 10px; text-decoration: none; }
+.update-how {
+  font: inherit; font-size: 12px; color: var(--text-muted);
+  background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
+.update-how:hover { color: var(--text); }
+.update-dismiss { margin-left: 12px; font-size: 12px; }
+.update-howto {
+  border-top: 1px solid var(--border);
+  padding: 6px 16px 8px; font-size: 12px; color: var(--text-muted); text-align: center;
+}
+.update-howto code { background: var(--bg); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+.update-howto a { color: var(--accent); }
+.muted { color: var(--text-muted); }
+
 /* ---------- sidebar ---------- */
 .body { overflow: hidden; }
 .sidebar {

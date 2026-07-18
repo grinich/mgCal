@@ -1,4 +1,5 @@
 import { Header } from './Header'
+import { UpdateBanner } from './UpdateBanner'
 import { Sidebar } from './Sidebar'
 import { TimeGrid } from './views/TimeGrid'
 import { MonthView } from './views/MonthView'
@@ -33,6 +34,7 @@ export function App() {
 
   return (
     <div class="app">
+      <UpdateBanner />
       <Header />
       <div class="body">
         <Sidebar />
