@@ -3,7 +3,7 @@ import type { EventRow } from '../../data/types'
 import { calendarById, nowMs, openEdit, overflowList, selectedKey } from '../state/signals'
 import { DAY, DOW, defaultScrollTop, fmtTime, fmtTimeShort, HOUR, HOUR_H, isSameDay } from '../time'
 import { layoutDay, layoutLanes, splitAllDay } from './layout'
-import { textOnColor } from '../colors'
+import { chipTextColor } from '../colors'
 import { chipColor, EventChip, eventKey, isDeclined, toggleSelect } from './EventChip'
 import { drag, makeGeom, startCreateDrag, type GridGeom } from './drag'
 
@@ -61,7 +61,7 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
                   left: `calc(${(l.startCol / days.length) * 100}% + 1px)`,
                   width: `calc(${(l.span / days.length) * 100}% - 3px)`,
                   '--c': chipColor(l.ev),
-                  '--ct': textOnColor(chipColor(l.ev)),
+                  '--ct': chipTextColor(chipColor(l.ev)),
                 }}
                 onClick={(e) => {
                   e.stopPropagation()

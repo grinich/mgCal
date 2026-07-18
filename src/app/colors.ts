@@ -31,11 +31,35 @@ export function eventColorLabel(colorId?: string): string | undefined {
   return c ? (c.label ?? c.name) : undefined
 }
 
-/** White or near-black, whichever reads on a solid chip of this color. */
+/** Google renders WHITE text on every color of its current palettes — even
+ * Banana yellow at ~1.7:1 contrast (Google's call; matched deliberately so
+ * chips look identical to Google Calendar). Luminance can't reproduce that
+ * choice (#f6bf26 → white but equally-light pastels → dark), so membership
+ * in the known palettes decides, and only custom/legacy-pastel calendar
+ * colors fall back to the computed contrast pick. */
+const WHITE_TEXT_HEXES = new Set([
+  ...Object.values(EVENT_COLORS).map((c) => c.hex),
+  // modern calendar palette (24)
+  '#795548', '#e67c73', '#d50000', '#f4511e', '#ef6c00', '#f09300',
+  '#009688', '#0b8043', '#7cb342', '#c0ca33', '#e4c441', '#f6bf26',
+  '#33b679', '#039be5', '#4285f4', '#3f51b5', '#7986cb', '#b39ddb',
+  '#616161', '#a79b8e', '#ad1457', '#d81b60', '#8e24aa', '#9e69af',
+])
+
+export function chipTextColor(fill: string): string {
+  return WHITE_TEXT_HEXES.has(fill.toLowerCase()) ? '#fff' : textOnColor(fill)
+}
+
+/** White or near-black by WCAG contrast — for colors outside Google's
+ * palettes (custom calendar hexes), where there's no convention to match. */
 export function textOnColor(color: string): string {
   const m = /^#([0-9a-f]{6})$/i.exec(color)
   if (!m) return '#fff'
   const n = parseInt(m[1]!, 16)
-  const lum = 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)
-  return lum > 160 ? 'rgba(10, 10, 10, 0.82)' : '#fff'
+  const lin = (v: number) => {
+    const s = v / 255
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  }
+  const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255)
+  return 1.05 / (L + 0.05) >= 3 ? '#fff' : 'rgba(10, 10, 10, 0.86)'
 }

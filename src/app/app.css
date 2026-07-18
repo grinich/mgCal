@@ -156,17 +156,24 @@
 }
 .chip.needs-action, .chip.declined {
   background: var(--bg);
-  color: var(--c);
+  /* Text darkened toward --text: raw light colors (Banana, Tangerine) are
+   * unreadable on the page background; the border keeps the color identity. */
+  color: color-mix(in srgb, var(--c) 45%, var(--text));
   box-shadow: inset 0 0 0 1.5px var(--c), 0 0 0 1px var(--bg);
 }
 .chip.declined { opacity: 0.75; }
+/* The hover card is a child, so the declined fade would make it see-through —
+ * go fully opaque while hovered. */
+.chip.declined:hover { opacity: 1; }
 .chip.declined .chip-title { text-decoration: line-through; }
 .chip.tentative {
   background: repeating-linear-gradient(
     45deg,
+    /* 72% keeps the light stripe dark enough that --ct (picked against the
+     * full-strength color) still reads on it. */
     var(--c) 0, var(--c) 5px,
-    color-mix(in srgb, var(--c) 55%, var(--bg)) 5px,
-    color-mix(in srgb, var(--c) 55%, var(--bg)) 10px
+    color-mix(in srgb, var(--c) 72%, var(--bg)) 5px,
+    color-mix(in srgb, var(--c) 72%, var(--bg)) 10px
   );
 }
 .chip-card {
@@ -215,7 +222,7 @@
 }
 .chip-rsvp-btn:hover { opacity: 1; }
 .chip-rsvp-btn.active { background: var(--ct, #fff); color: var(--c); border-color: transparent; opacity: 1; }
-.chip.needs-action .chip-rsvp-btn.active, .chip.declined .chip-rsvp-btn.active { background: var(--c); color: var(--bg); }
+.chip.needs-action .chip-rsvp-btn.active, .chip.declined .chip-rsvp-btn.active { background: var(--c); color: var(--ct, #fff); }
 .peek-loc-link { color: var(--text); text-decoration: none; }
 .peek-loc-link:hover { color: var(--accent); text-decoration: underline; }
 .chip.pending::after, .lane-chip.pending::after {
@@ -381,6 +388,7 @@
   border-radius: 8px; padding: 8px; font-weight: 600;
 }
 .peek-meet:hover { filter: brightness(1.08); }
+.peek-meet.zoom { background: #2d8cff; }
 
 .peek-guests { min-width: 0; flex: 1; }
 .peek-guest-summary {
@@ -587,15 +595,49 @@ kbd {
 .connect-card p { color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
 .connect-card code { font-size: 11px; }
 
-/* ---------- sync badge (header center) ---------- */
-.header { position: relative; }
+/* ---------- sync badge (header right, before the view switch) ---------- */
 .sync-badge {
-  position: absolute; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 7px;
   font: inherit; font-size: 12px; color: var(--text-muted);
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 14px; padding: 4px 12px; cursor: pointer;
-  white-space: nowrap; z-index: 5;
+  white-space: nowrap;
+}
+
+/* ---------- current-event pill (header center) ---------- */
+.header { position: relative; }
+.now-center {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px;
+  max-width: 42%; z-index: 5;
+}
+.now-pill {
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+  font: inherit; font-size: 12px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 4px 12px; cursor: pointer;
+  white-space: nowrap;
+}
+.now-pill:hover { border-color: var(--border-strong); }
+/* NOT .now-dot — that's the now-line's marker on the time grid. */
+.now-cal-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.now-title {
+  font-weight: 600; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.now-until { color: var(--text-muted); flex: none; }
+.zoom-btn {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  font-size: 12px; font-weight: 600; color: #fff; text-decoration: none;
+  background: #2d8cff; /* Zoom blue */
+  border-radius: 14px; padding: 4.5px 12px;
+  white-space: nowrap;
+}
+.zoom-btn:hover { background: #2681f2; }
+.zoom-kbd {
+  font: inherit; font-size: 10px; font-weight: 600; line-height: 1;
+  background: rgba(255, 255, 255, 0.22); border-radius: 4px;
+  padding: 2.5px 4px; margin-left: 1px;
 }
 .sync-badge:hover { border-color: var(--border-strong); color: var(--text); }
 .sync-badge.busy { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }

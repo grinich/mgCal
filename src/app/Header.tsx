@@ -12,8 +12,10 @@ import {
   toggleSidebar,
   view,
 } from './state/signals'
-import { fmtMonthYear, relTime } from './time'
+import { fmtMonthYear, fmtTime, relTime } from './time'
 import { connectGoogle } from './connect'
+import { chipColor, toggleSelect } from './views/EventChip'
+import { currentEvent, JOIN_KEY_HINT, ZoomIcon, ZoomJoinLink, zoomLink } from './zoom'
 
 function SyncBadge() {
   const isDev = chrome.runtime.id === 'dev-shim'
@@ -58,10 +60,36 @@ function SyncBadge() {
   )
 }
 
+/** Center pill: the meeting happening right now, plus a Zoom join shortcut. */
+function NowPill() {
+  const cur = currentEvent()
+  if (!cur) return null
+  const zoom = zoomLink(cur)
+  return (
+    <div class="now-center">
+      <button
+        class="now-pill"
+        title="Show event details"
+        onClick={(e) => toggleSelect(cur, e.currentTarget as HTMLElement)}
+      >
+        <span class="now-cal-dot" style={{ background: chipColor(cur) }} />
+        <span class="now-title">{cur.summary || '(no title)'}</span>
+        <span class="now-until">until {fmtTime(cur.endMs)}</span>
+      </button>
+      {zoom && (
+        <ZoomJoinLink cls="zoom-btn" url={zoom}>
+          <ZoomIcon />
+          Join Zoom
+          <kbd class="zoom-kbd">{JOIN_KEY_HINT}</kbd>
+        </ZoomJoinLink>
+      )}
+    </div>
+  )
+}
+
 export function Header() {
   return (
     <header class="header">
-      <SyncBadge />
       <button class="icon-btn" title="Toggle sidebar (s)" onClick={toggleSidebar}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M2 4h12M2 8h12M2 12h12" stroke-linecap="round" />
@@ -79,12 +107,14 @@ export function Header() {
           ›
         </button>
       </div>
+      <NowPill />
       <div class="spacer" />
       {authNeeded.value && (
         <button class="btn accent" onClick={() => void connectGoogle()}>
           Reconnect Google
         </button>
       )}
+      <SyncBadge />
       <div class="view-switch">
         {(['day', 'week', 'month'] as const).map((v) => (
           <button key={v} class={'seg' + (view.value === v ? ' active' : '')} onClick={() => setView(v)}>

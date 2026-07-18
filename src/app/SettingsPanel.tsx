@@ -60,6 +60,7 @@ const SHORTCUTS: [string, string][] = [
   ['/', 'Search'],
   ['e', 'Open selected event'],
   ['⌫', 'Delete selected event'],
+  ['⌘↵', 'Join current Zoom meeting'],
   ['s', 'Toggle sidebar'],
   ['Esc', 'Close / deselect'],
   ['?', 'This help'],

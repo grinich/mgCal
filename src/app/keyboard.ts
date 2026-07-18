@@ -17,6 +17,7 @@ import {
   toggleSidebar,
 } from './state/signals'
 import { deleteEventScoped } from '../data/outbox'
+import { currentEvent, joinZoom, zoomLink } from './zoom'
 
 type Handler = () => void
 
@@ -66,6 +67,17 @@ export function initKeyboard(): void {
   })
 
   document.addEventListener('keydown', (e) => {
+    // ⌘↵ / Ctrl↵: join the current meeting's Zoom. defaultPrevented skips it
+    // when a dialog claimed the combo (the event editor saves on ⌘↵).
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !e.altKey && !e.defaultPrevented && !editor.value) {
+      const ev = currentEvent()
+      const url = ev && zoomLink(ev)
+      if (url) {
+        e.preventDefault()
+        joinZoom(url)
+      }
+      return
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return
     const t = e.target as HTMLElement
     if (

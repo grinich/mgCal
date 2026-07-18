@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks'
 import { patchEventScoped, rsvpEvent } from '../../data/outbox'
 import type { EventRow } from '../../data/types'
-import { EVENT_COLORS, eventColorHex, textOnColor } from '../colors'
+import { chipTextColor, EVENT_COLORS, eventColorHex } from '../colors'
 import { cleanLocation, locationHref } from '../location'
 import { askScope, calendarById, openEdit, selectedAnchor, selectedKey } from '../state/signals'
 import { fmtTime } from '../time'
@@ -152,7 +152,7 @@ export function EventChip({
         width: `calc(${widthPct}% - 3px)`,
         '--z': z,
         '--c': c,
-        '--ct': textOnColor(c),
+        '--ct': chipTextColor(c),
       }}
       onPointerDown={(e) => geom && canEdit(ev) && startEventDrag(e, ev, 'move', geom)}
       onClick={(e) => {

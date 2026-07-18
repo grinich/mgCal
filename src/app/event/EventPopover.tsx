@@ -6,6 +6,7 @@ import { DAY, fmtTime } from '../time'
 import { chipColor } from '../views/EventChip'
 import { eventColorLabel } from '../colors'
 import { locationHref } from '../location'
+import { ZoomIcon, ZoomJoinLink, zoomLink } from '../zoom'
 
 const W = 340
 
@@ -179,6 +180,13 @@ function Popover({ ev }: { ev: EventRow }) {
           <span class="peek-icon"><Icon d={I.repeat} /></span>
           <span class="muted">Repeats</span>
         </div>
+      )}
+
+      {zoomLink(ev) && (
+        <ZoomJoinLink cls="peek-meet zoom" url={zoomLink(ev)!}>
+          <ZoomIcon size={15} />
+          Join Zoom
+        </ZoomJoinLink>
       )}
 
       {ev.hangoutLink && (
