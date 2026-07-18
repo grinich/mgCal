@@ -62,13 +62,23 @@ function toGTime(ms: number, allDay: boolean): GDateTime {
   return { dateTime: new Date(ms).toISOString() }
 }
 
+/** While a drag is live, body.ev-dragging suppresses every chip hover card —
+ * otherwise cards pop under the moving cursor and bury the drop target. */
+function setDragging(on: boolean): void {
+  document.body.classList.toggle('ev-dragging', on)
+}
+
 export function startEventDrag(e: PointerEvent, ev: EventRow, mode: 'move' | 'resize', geom: GridGeom): void {
   if (e.button !== 0) return
   e.preventDefault()
   e.stopPropagation()
+  // Capture so the grid keeps receiving moves (and other elements stop
+  // hovering) even when the cursor crosses popovers or leaves the window.
+  ;(e.currentTarget as HTMLElement | null)?.setPointerCapture?.(e.pointerId)
   const grabOffset = geom.timeAt(e) - ev.startMs
   const duration = ev.endMs - ev.startMs
   drag.value = { kind: 'event', ev, mode, startMs: ev.startMs, endMs: ev.endMs, moved: false }
+  setDragging(true)
 
   const onMove = (me: PointerEvent) => {
     const t = geom.timeAt(me)
@@ -85,6 +95,7 @@ export function startEventDrag(e: PointerEvent, ev: EventRow, mode: 'move' | 're
   const onUp = () => {
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
+    setDragging(false)
     const cur = drag.value
     drag.value = null
     if (cur?.kind !== 'event') return
@@ -107,8 +118,10 @@ export function startEventDrag(e: PointerEvent, ev: EventRow, mode: 'move' | 're
 
 export function startCreateDrag(e: PointerEvent, geom: GridGeom): void {
   if (e.button !== 0) return
+  ;(e.currentTarget as HTMLElement | null)?.setPointerCapture?.(e.pointerId)
   const anchor = Math.floor(geom.timeAt(e) / SNAP) * SNAP
   drag.value = { kind: 'create', anchorMs: anchor, startMs: anchor, endMs: anchor + SNAP, moved: false }
+  setDragging(true)
 
   const onMove = (me: PointerEvent) => {
     const t = snap(geom.timeAt(me))
@@ -121,6 +134,7 @@ export function startCreateDrag(e: PointerEvent, geom: GridGeom): void {
   const onUp = () => {
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
+    setDragging(false)
     const cur = drag.value
     drag.value = null
     if (cur?.kind !== 'create') return

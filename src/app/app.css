@@ -211,6 +211,10 @@
 }
 .chip:hover .chip-card { display: block; }
 .chip.dragging .chip-card { display: none; }
+/* No hover cards anywhere while a drag is live — they'd pop under the moving
+ * cursor and bury the drop target. */
+body.ev-dragging .chip-card { display: none !important; }
+body.ev-dragging .chip, body.ev-dragging .day-col { cursor: grabbing; }
 .chip-card-title {
   font-size: 12px; font-weight: 600; line-height: 1.3;
   white-space: normal; word-break: break-word;
