@@ -4,6 +4,7 @@ import { App } from './app/App'
 import { initApp } from './app/state/signals'
 import { initKeyboard } from './app/keyboard'
 import { initTheme } from './app/theme'
+import { initFavicon } from './app/favicon'
 
 async function boot() {
   // Dev-only: chrome.* shim + demo data so the page runs on localhost.
@@ -14,6 +15,7 @@ async function boot() {
   initApp()
   initKeyboard()
   initTheme()
+  initFavicon()
 
   // Swap the static skeleton for the live app in a single frame — the layouts
   // are identical, so the first hydrated paint lands without a visible shift.

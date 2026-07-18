@@ -76,6 +76,17 @@ export function fmtTimeShort(ms: number): string {
 
 export const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
+/** Wall-clock hours (0–24, fractional) of `ms` within the local day
+ * [dayStartMs, dayEndMs). The grid's rows are wall-clock hours, so events
+ * position by what the clock said — not elapsed time since midnight, which
+ * runs an hour off after a DST transition (23h/25h days). */
+export function wallHours(ms: number, dayStartMs: number, dayEndMs: number): number {
+  if (ms <= dayStartMs) return 0
+  if (ms >= dayEndMs) return 24
+  const d = new Date(ms)
+  return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600
+}
+
 /** Scroll offset used by both the static skeleton and the hydrated grid. */
 export function defaultScrollTop(todayVisible: boolean): number {
   if (todayVisible) {

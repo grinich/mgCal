@@ -224,9 +224,14 @@ body.ev-dragging .chip, body.ev-dragging .day-col { cursor: grabbing; }
 .chip.compact .chip-card .chip-time { display: block; }
 .chip.selected { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 18; }
 .chip-title {
-  font-size: 12px; font-weight: 550; line-height: 1.25;
+  font-size: var(--chip-fs, 12px); font-weight: 550; line-height: 1.25;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Shorter than one text line: no vertical padding, text hugs the chip. The
+ * hover card resets to normal size (its children set explicit font sizes). */
+.chip.tiny { padding: 0 6px; }
+.chip.tiny .chip-title { line-height: 1.05; }
+.chip.tiny .chip-card .chip-title { font-size: 12px; line-height: 1.25; }
 .chip-time { font-size: 11px; opacity: 0.85; }
 .chip-loc {
   display: block; font-size: 11px; opacity: 0.85;

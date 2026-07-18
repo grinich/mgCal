@@ -126,6 +126,9 @@ export function EventChip({
   const key = eventKey(ev)
   const selected = selectedKey.value === key
   const compact = height < 32
+  // Below one comfortable text line, scale the font to the chip instead of
+  // overflowing into the neighbor below.
+  const tiny = height < 17
   const d = drag.value
   const beingDragged = d?.kind === 'event' && eventKey(d.ev) === key
   const declined = isDeclined(ev)
@@ -138,6 +141,7 @@ export function EventChip({
       class={
         'chip' +
         (compact ? ' compact' : '') +
+        (tiny ? ' tiny' : '') +
         (selected ? ' selected' : '') +
         (declined ? ' declined' : '') +
         (needsAction ? ' needs-action' : '') +
@@ -153,6 +157,7 @@ export function EventChip({
         '--z': z,
         '--c': c,
         '--ct': chipTextColor(c),
+        ...(tiny ? { '--chip-fs': `${Math.max(8, Math.floor(height) - 4)}px` } : null),
       }}
       onPointerDown={(e) => geom && canEdit(ev) && startEventDrag(e, ev, 'move', geom)}
       onClick={(e) => {

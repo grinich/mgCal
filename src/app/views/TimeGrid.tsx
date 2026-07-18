@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'preact/hooks'
 import type { EventRow } from '../../data/types'
 import { calendarById, nowMs, openEdit, overflowList, selectedKey } from '../state/signals'
-import { addDays, DAY, DOW, defaultScrollTop, fmtTime, fmtTimeShort, HOUR, hourH, isSameDay, setHourH } from '../time'
+import { addDays, DOW, defaultScrollTop, fmtTime, fmtTimeShort, hourH, isSameDay, setHourH, wallHours } from '../time'
 import { layoutDay, layoutLanes, splitAllDay } from './layout'
 import { chipTextColor } from '../colors'
 import { chipColor, EventChip, eventKey, isDeclined, toggleSelect } from './EventChip'
@@ -155,7 +155,7 @@ function DayColumn({
   const now = nowMs.value
   const isToday = isSameDay(day, new Date(now))
   const dayEvents = events.filter((e) => e.startMs < dayEndMs && e.endMs > dayStartMs)
-  const { chips, overflows } = layoutDay(dayEvents, dayStartMs, maxCols, priorityRank)
+  const { chips, overflows } = layoutDay(dayEvents, dayStartMs, dayEndMs, maxCols, priorityRank)
 
   const d = drag.value
   let ghost: { top: number; height: number; label: string; color?: string } | null = null
@@ -163,8 +163,8 @@ function DayColumn({
     const s = Math.max(d.startMs, dayStartMs)
     const e = Math.min(d.endMs, dayEndMs)
     ghost = {
-      top: ((s - dayStartMs) / HOUR) * hourH.value,
-      height: Math.max(((e - s) / HOUR) * hourH.value - 2, 12),
+      top: wallHours(s, dayStartMs, dayEndMs) * hourH.value,
+      height: Math.max((wallHours(e, dayStartMs, dayEndMs) - wallHours(s, dayStartMs, dayEndMs)) * hourH.value - 2, 12),
       label:
         d.kind === 'event'
           ? `${d.ev.summary || '(no title)'} · ${fmtTimeShort(d.startMs)}–${fmtTime(d.endMs)}`
@@ -211,7 +211,7 @@ function DayColumn({
         </div>
       )}
       {isToday && (
-        <div class="now-line" style={{ top: `${((now - dayStartMs) / HOUR) * hourH.value}px` }}>
+        <div class="now-line" style={{ top: `${wallHours(now, dayStartMs, dayEndMs) * hourH.value}px` }}>
           <div class="now-dot" />
         </div>
       )}

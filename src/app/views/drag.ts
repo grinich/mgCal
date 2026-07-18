@@ -2,7 +2,7 @@ import { signal } from '@preact/signals'
 import { patchEventScoped } from '../../data/outbox'
 import type { EventRow, GDateTime } from '../../data/types'
 import { askScope, openCreate, selectedKey } from '../state/signals'
-import { DAY, MIN } from '../time'
+import { MIN } from '../time'
 
 const SNAP = 15 * MIN
 
@@ -42,7 +42,10 @@ export function makeGeom(inner: HTMLElement, days: Date[], gutterPx: number): Gr
       const colW = (rect.width - gutterPx) / days.length
       const dayIdx = Math.max(0, Math.min(days.length - 1, Math.floor((e.clientX - rect.left - gutterPx) / colW)))
       const frac = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
-      return days[dayIdx]!.getTime() + frac * DAY
+      // Grid rows are wall-clock hours: build the time via Date fields, not
+      // dayStart + frac*24h, which drifts an hour on DST-transition days.
+      const d = days[dayIdx]!
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, Math.round(frac * 24 * 60)).getTime()
     },
   }
 }
@@ -68,13 +71,22 @@ function setDragging(on: boolean): void {
   document.body.classList.toggle('ev-dragging', on)
 }
 
+/** Capture so the grid keeps receiving moves (and other elements stop
+ * hovering) even when the cursor crosses popovers or leaves the window.
+ * Throws on already-released or synthetic pointers — never fatal. */
+function capturePointer(e: PointerEvent): void {
+  try {
+    ;(e.currentTarget as HTMLElement | null)?.setPointerCapture?.(e.pointerId)
+  } catch {
+    /* drag still works, just without capture */
+  }
+}
+
 export function startEventDrag(e: PointerEvent, ev: EventRow, mode: 'move' | 'resize', geom: GridGeom): void {
   if (e.button !== 0) return
   e.preventDefault()
   e.stopPropagation()
-  // Capture so the grid keeps receiving moves (and other elements stop
-  // hovering) even when the cursor crosses popovers or leaves the window.
-  ;(e.currentTarget as HTMLElement | null)?.setPointerCapture?.(e.pointerId)
+  capturePointer(e)
   const grabOffset = geom.timeAt(e) - ev.startMs
   const duration = ev.endMs - ev.startMs
   drag.value = { kind: 'event', ev, mode, startMs: ev.startMs, endMs: ev.endMs, moved: false }
@@ -118,7 +130,7 @@ export function startEventDrag(e: PointerEvent, ev: EventRow, mode: 'move' | 're
 
 export function startCreateDrag(e: PointerEvent, geom: GridGeom): void {
   if (e.button !== 0) return
-  ;(e.currentTarget as HTMLElement | null)?.setPointerCapture?.(e.pointerId)
+  capturePointer(e)
   const anchor = Math.floor(geom.timeAt(e) / SNAP) * SNAP
   drag.value = { kind: 'create', anchorMs: anchor, startMs: anchor, endMs: anchor + SNAP, moved: false }
   setDragging(true)

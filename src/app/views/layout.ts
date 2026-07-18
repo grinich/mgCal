@@ -1,5 +1,5 @@
 import type { EventRow } from '../../data/types'
-import { addDays, DAY, HOUR, hourH } from '../time'
+import { addDays, DAY, hourH, wallHours } from '../time'
 
 export interface Positioned {
   ev: EventRow
@@ -32,10 +32,10 @@ const OVERFLOW_RAIL_PCT = 11 // right rail reserved for the +N pill
 export function layoutDay(
   events: EventRow[],
   dayStartMs: number,
+  dayEndMs: number,
   maxCols = 3,
   rank: (ev: EventRow) => number = () => 0,
 ): DayLayout {
-  const dayEndMs = dayStartMs + DAY
   const items = events
     .map((ev) => {
       const start = Math.max(ev.startMs, dayStartMs)
@@ -49,7 +49,7 @@ export function layoutDay(
   let cluster: { ev: EventRow; start: number; end: number; col: number }[] = []
   let clusterEnd = -Infinity
 
-  const yOf = (ms: number) => ((ms - dayStartMs) / HOUR) * hourH.value
+  const yOf = (ms: number) => wallHours(ms, dayStartMs, dayEndMs) * hourH.value
 
   const flush = () => {
     if (!cluster.length) return
@@ -86,7 +86,10 @@ export function layoutDay(
       chips.push({
         ev: c.ev,
         top: yOf(c.start),
-        height: Math.max(yOf(c.end) - yOf(c.start) - 2, 17),
+        // True slot height, tiny floor only: padding a chip up to a readable
+        // minimum makes back-to-back short events overlap even though their
+        // TIMES don't — instead EventChip shrinks its text to fit.
+        height: Math.max(yOf(c.end) - yOf(c.start) - 2, 7),
         leftPct,
         widthPct,
         z: 2 + c.col,
