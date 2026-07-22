@@ -68,6 +68,10 @@ export interface EditorState {
   endMs: number
   location: string
   description: string
+  /** Set for drag-created events: show the title-only quick-create popup
+   * anchored at these viewport coords instead of the full editor — the drag
+   * already supplied everything else. */
+  quickAt?: { x: number; y: number }
 }
 
 export const editor = signal<EditorState | null>(null)
@@ -76,7 +80,7 @@ export function writableCalendars(): CalendarRow[] {
   return calendars.value.filter((c) => c.accessRole === 'owner' || c.accessRole === 'writer')
 }
 
-export function openCreate(startMs?: number, endMs?: number, allDay = false): void {
+export function openCreate(startMs?: number, endMs?: number, allDay = false, quickAt?: { x: number; y: number }): void {
   const writable = writableCalendars()
   const cal = writable.find((c) => c.primary) ?? writable[0]
   if (!cal) return
@@ -96,6 +100,7 @@ export function openCreate(startMs?: number, endMs?: number, allDay = false): vo
     endMs: endMs ?? s + (allDay ? DAY : HOUR),
     location: '',
     description: '',
+    quickAt,
   }
 }
 

@@ -159,9 +159,12 @@ function TimeField({ ms, onCommit, label }: { ms: number; onCommit: (minutes: nu
   )
 }
 
+/** Compact date input; the mini-month calendar pops under it only while the
+ * field has focus (Google-style) instead of living in the form. */
 function DateField({ ms, onCommit, label }: { ms: number; onCommit: (d: Date) => void; label: string }) {
   const [text, setText] = useState(fmtDateText(ms))
   const [bad, setBad] = useState(false)
+  const [open, setOpen] = useState(false)
   useEffect(() => {
     setText(fmtDateText(ms))
     setBad(false)
@@ -177,20 +180,45 @@ function DateField({ ms, onCommit, label }: { ms: number; onCommit: (d: Date) =>
     }
   }
   return (
-    <input
-      class={'field-input date-input' + (bad ? ' bad' : '')}
-      value={text}
-      aria-label={label}
-      onInput={(e) => setText(e.currentTarget.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault()
+    <div class="date-field">
+      <input
+        class={'field-input date-input' + (bad ? ' bad' : '')}
+        value={text}
+        aria-label={label}
+        onInput={(e) => setText(e.currentTarget.value)}
+        onBlur={() => {
+          setOpen(false)
           commit()
-        }
-      }}
-      onFocus={(e) => e.currentTarget.select()}
-    />
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            setOpen(false)
+            commit()
+          } else if (e.key === 'Escape' && open) {
+            e.stopPropagation() // close the picker, not the editor
+            setOpen(false)
+          }
+        }}
+        onFocus={(e) => {
+          e.currentTarget.select()
+          setOpen(true)
+        }}
+      />
+      {open && (
+        // pointerdown preventDefault keeps the input focused (and its blur
+        // from firing) while clicking the calendar's day/nav buttons.
+        <div class="date-menu" onPointerDown={(e) => e.preventDefault()}>
+          <MiniMonth
+            valueMs={ms}
+            onPick={(d) => {
+              setOpen(false)
+              onCommit(d)
+            }}
+          />
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -258,7 +286,90 @@ function MiniMonth({ valueMs, onPick }: { valueMs: number; onPick: (d: Date) => 
 export function EventEditor() {
   const st = editor.value
   if (!st) return null
+  if (st.quickAt) return <QuickCreate key="quick" />
   return <EditorForm key={st.original ? `${st.original.calendarId}|${st.original.id}` : 'create'} />
+}
+
+function fmtDay(ms: number): string {
+  return new Date(ms).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+/** Title-only popup for drag-created events (Google-style quick add): the
+ * drag already fixed the times, so just ask for a name. Enter/Save creates,
+ * Esc or click-away cancels, "More options" expands into the full editor. */
+function QuickCreate() {
+  const st = editor.value!
+  const at = st.quickAt!
+  const [summary, setSummary] = useState('')
+  const ref = useRef<HTMLFormElement>(null)
+  const titleRef = useRef<HTMLInputElement>(null)
+  const [pos, setPos] = useState<{ left: number; top: number }>({ left: -9999, top: 0 })
+
+  useEffect(() => {
+    const w = ref.current?.offsetWidth ?? 300
+    const h = ref.current?.offsetHeight ?? 130
+    setPos({
+      left: Math.max(8, Math.min(at.x + 12, window.innerWidth - w - 8)),
+      top: Math.max(8, Math.min(at.y + 12, window.innerHeight - h - 8)),
+    })
+    titleRef.current?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const close = () => (editor.value = null)
+
+  async function save(e?: Event) {
+    e?.preventDefault()
+    const fields: Partial<GEvent> & { start: GDateTime; end: GDateTime } = {
+      start: toGTime(st.startMs, st.allDay),
+      end: toGTime(st.endMs, st.allDay),
+    }
+    if (summary) fields.summary = summary
+    await createEvent(st.calendarId, fields)
+    close()
+  }
+
+  const when = st.allDay
+    ? st.endMs - DAY > st.startMs
+      ? `${fmtDay(st.startMs)} – ${fmtDay(st.endMs - DAY)}` // exclusive → inclusive end day
+      : fmtDay(st.startMs)
+    : `${fmtDay(st.startMs)} ⋅ ${fmtTime(st.startMs)} – ${fmtTime(st.endMs)}`
+
+  return (
+    <div class="overlay quick-overlay" onClick={close}>
+      <form
+        ref={ref}
+        class="panel editor quick-create"
+        style={pos}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={save}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.stopPropagation()
+            close()
+          }
+        }}
+      >
+        <input
+          ref={titleRef}
+          class="editor-title"
+          placeholder="Add title"
+          value={summary}
+          onInput={(e) => setSummary(e.currentTarget.value)}
+        />
+        <div class="quick-when">{when}</div>
+        <div class="editor-actions">
+          <div class="spacer" />
+          <button type="button" class="btn" onClick={() => (editor.value = { ...st, summary, quickAt: undefined })}>
+            More options
+          </button>
+          <button type="submit" class="btn accent" data-save>
+            Save
+          </button>
+        </div>
+      </form>
+    </div>
+  )
 }
 
 function EditorForm() {
@@ -417,7 +528,6 @@ function EditorForm() {
                 <TimeField ms={startMs} label="Start time" onCommit={(m) => moveStart(withMinutes(startMs, m))} />
               )}
             </div>
-            <MiniMonth valueMs={startMs} onPick={(d) => moveStart(withDate(startMs, d))} />
           </div>
           <div class="when-col">
             <div class="when-label">Ends</div>
@@ -427,7 +537,6 @@ function EditorForm() {
                 <TimeField ms={endMs} label="End time" onCommit={(m) => moveEnd(withMinutes(endMs, m))} />
               )}
             </div>
-            <MiniMonth valueMs={endMs} onPick={(d) => moveEnd(withDate(endMs, d))} />
           </div>
         </div>
 

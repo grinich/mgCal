@@ -15,7 +15,9 @@
   gap: 8px;
   user-select: none;
 }
-.title { font-size: 16px; font-weight: 600; letter-spacing: -0.2px; margin-right: 4px; }
+/* min-width fits the widest month name ("September 2026") so the Today/nav
+ * buttons after it never shift as the title changes length. */
+.title { font-size: 16px; font-weight: 600; letter-spacing: -0.2px; margin-right: 4px; min-width: 8.5em; }
 .spacer { flex: 1; }
 .btn {
   font: inherit; color: var(--text);
@@ -103,6 +105,7 @@
   border-bottom: 1px solid var(--border);
   padding: 6px 0;
   user-select: none;
+  touch-action: none; /* header dates are a drag-to-create surface */
 }
 .day-head { text-align: center; }
 .day-head .dow {
@@ -123,7 +126,10 @@
 .allday-label {
   font-size: 10px; color: var(--text-muted); text-align: right; padding: 3px 8px 0 0;
 }
-.allday-lanes { grid-column: 2 / -1; position: relative; }
+.allday-lanes { grid-column: 2 / -1; position: relative; touch-action: none; }
+/* The in-progress all-day create: a real-looking chip, but inert — pointer
+ * events must fall through to the lane so the drag keeps tracking. */
+.lane-chip.draft { pointer-events: none; }
 
 .grid-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; }
 .grid-inner { display: grid; position: relative; }
@@ -155,6 +161,14 @@
 /* Google-style solid chips: full-saturation calendar/event color fill with
  * contrast-aware text (--ct). Status treatments match Google: outlined = not
  * responded, outlined + strikethrough = declined, striped = tentative. */
+/* Dark mode: dark text on every event fill (the full-saturation fills read
+ * as the bright element on a dark page, so dark text carries the contrast).
+ * --ct is set inline per chip, so !important is needed to beat it. */
+:root[data-theme='dark'] .chip,
+:root[data-theme='dark'] .lane-chip,
+:root[data-theme='dark'] .month-chip {
+  --ct: rgba(10, 10, 10, 0.86) !important;
+}
 .chip {
   position: absolute; z-index: var(--z, 2);
   background: var(--c);
@@ -609,6 +623,11 @@ body.ev-dragging .chip, body.ev-dragging .day-col { cursor: grabbing; }
   border-radius: 12px; box-shadow: var(--shadow); padding: 20px;
 }
 .panel-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+/* Quick create: undimmed backdrop (still catches click-away), panel pinned
+ * near the drag-release point instead of centered. */
+.quick-overlay { background: transparent; }
+.quick-create { position: fixed; width: 300px; padding: 14px 16px 12px; gap: 6px; }
+.quick-when { font-size: 12px; color: var(--text-muted); }
 .panel-hint { margin-top: 16px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
 .setting-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -784,7 +803,8 @@ kbd {
 .cat-item.active { font-weight: 700; }
 
 /* ---------- large editor with inline pickers ---------- */
-.editor-lg { width: 760px; max-width: 94vw; max-height: 92vh; overflow-y: auto; }
+/* Sized for the compact field rows (the mini-month lives in a popover now). */
+.editor-lg { width: 540px; max-width: 94vw; max-height: 92vh; overflow-y: auto; }
 /* Without this, hitting max-height makes the flex children SHRINK to fit
  * (the description collapses to a sliver) instead of overflowing — which
  * leaves nothing to scroll. */
@@ -808,10 +828,18 @@ kbd {
 .date-input { flex: 1.4; }
 .time-input { flex: 1; }
 
+.date-field { position: relative; }
+.date-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
+  width: 216px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: var(--shadow);
+}
 .mini-month {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 10px; padding: 8px;
 }
+.date-menu .mini-month { background: var(--bg); border: none; }
 .mini-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 .mini-title { font-size: 12px; font-weight: 600; }
 .mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }

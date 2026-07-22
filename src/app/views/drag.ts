@@ -2,7 +2,7 @@ import { signal } from '@preact/signals'
 import { patchEventScoped } from '../../data/outbox'
 import type { EventRow, GDateTime } from '../../data/types'
 import { askScope, openCreate, selectedKey } from '../state/signals'
-import { MIN } from '../time'
+import { addDays, MIN } from '../time'
 
 const SNAP = 15 * MIN
 
@@ -23,7 +23,15 @@ export interface CreateDrag {
   moved: boolean
 }
 
-export const drag = signal<EventDrag | CreateDrag | null>(null)
+export interface AllDayCreateDrag {
+  kind: 'create-allday'
+  anchorIdx: number
+  startIdx: number
+  endIdx: number // inclusive day index into the visible days
+  moved: boolean
+}
+
+export const drag = signal<EventDrag | CreateDrag | AllDayCreateDrag | null>(null)
 
 let justDragged = false
 export function wasDragged(): boolean {
@@ -128,6 +136,63 @@ export function startEventDrag(e: PointerEvent, ev: EventRow, mode: 'move' | 're
   window.addEventListener('pointerup', onUp)
 }
 
+/** Drag across the all-day strip (or the days header) to create a
+ * (multi-)day all-day event. The element under the pointer spans every day
+ * column — minus gutterPx of leading gutter — so day index comes from the
+ * pointer's horizontal fraction of it. clickCreates makes a plain click
+ * create a one-day event (header dates) instead of deselecting (strip). */
+export function startAllDayCreateDrag(
+  e: PointerEvent,
+  days: Date[],
+  opts?: { gutterPx?: number; clickCreates?: boolean },
+): void {
+  if (e.button !== 0) return
+  capturePointer(e)
+  const lane = e.currentTarget as HTMLElement // snapshot: currentTarget is null after dispatch
+  const gutter = opts?.gutterPx ?? 0
+  const idxAt = (pe: PointerEvent): number => {
+    const rect = lane.getBoundingClientRect()
+    const i = Math.floor(((pe.clientX - rect.left - gutter) / (rect.width - gutter)) * days.length)
+    return Math.max(0, Math.min(days.length - 1, i))
+  }
+  const anchor = idxAt(e)
+  drag.value = { kind: 'create-allday', anchorIdx: anchor, startIdx: anchor, endIdx: anchor, moved: false }
+  setDragging(true)
+
+  const onMove = (me: PointerEvent) => {
+    const cur = drag.value
+    if (cur?.kind !== 'create-allday') return
+    const i = idxAt(me)
+    // A few px of intent also counts as a drag, so a deliberate same-day drag
+    // creates a one-day event while a sloppy click still just deselects.
+    const moved = cur.moved || i !== cur.anchorIdx || Math.abs(me.clientX - e.clientX) > 4
+    const s = Math.min(cur.anchorIdx, i)
+    const en = Math.max(cur.anchorIdx, i)
+    if (s !== cur.startIdx || en !== cur.endIdx || moved !== cur.moved) {
+      drag.value = { ...cur, startIdx: s, endIdx: en, moved }
+    }
+  }
+  const onUp = (ue: PointerEvent) => {
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    setDragging(false)
+    const cur = drag.value
+    drag.value = null
+    if (cur?.kind !== 'create-allday') return
+    if (cur.moved || opts?.clickCreates) {
+      justDragged = true
+      setTimeout(() => (justDragged = false), 0)
+      const startMs = days[cur.startIdx]!.getTime()
+      const endMs = addDays(days[cur.endIdx]!, 1).getTime() // exclusive, as all-day ends are
+      openCreate(startMs, endMs, true, { x: ue.clientX, y: ue.clientY })
+    } else {
+      selectedKey.value = null
+    }
+  }
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+}
+
 export function startCreateDrag(e: PointerEvent, geom: GridGeom): void {
   if (e.button !== 0) return
   capturePointer(e)
@@ -143,7 +208,7 @@ export function startCreateDrag(e: PointerEvent, geom: GridGeom): void {
     const end = Math.max(cur.anchorMs + SNAP, t)
     if (s !== cur.startMs || end !== cur.endMs) drag.value = { ...cur, startMs: s, endMs: end, moved: true }
   }
-  const onUp = () => {
+  const onUp = (ue: PointerEvent) => {
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
     setDragging(false)
@@ -153,7 +218,7 @@ export function startCreateDrag(e: PointerEvent, geom: GridGeom): void {
     if (cur.moved) {
       justDragged = true
       setTimeout(() => (justDragged = false), 0)
-      openCreate(cur.startMs, cur.endMs)
+      openCreate(cur.startMs, cur.endMs, false, { x: ue.clientX, y: ue.clientY })
     } else {
       selectedKey.value = null
     }
