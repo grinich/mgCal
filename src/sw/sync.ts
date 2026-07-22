@@ -1,5 +1,6 @@
 import { api, ApiError } from '../google/api'
 import { AuthError } from '../google/auth'
+import { restoreSeries } from './flush'
 import { db, getSetting, normalizeEvent, setSetting, type DB } from '../data/db'
 import type { CalendarRow, GEvent, SyncStateRow } from '../data/types'
 
@@ -183,6 +184,7 @@ async function syncCalendar(d: DB, cal: CalendarRow, s: SyncStateRow): Promise<b
   }
 
   // Incremental: the token freezes the baseline's window server-side.
+  const staleMasters = new Set<string>()
   for (;;) {
     let resp: EventsPage
     try {
@@ -205,11 +207,20 @@ async function syncCalendar(d: DB, cal: CalendarRow, s: SyncStateRow): Promise<b
       }
       throw e
     }
-    changed += await upsertPage(d, cal.id, resp.items ?? [], s.baselineGen)
+    changed += await upsertPage(d, cal.id, resp.items ?? [], s.baselineGen, staleMasters)
     if (resp.nextPageToken) {
       s.pageToken = resp.nextPageToken
       await d.put('syncState', s)
     } else {
+      // A remote master retime/split changes which instance ids exist, and
+      // Google emits no `cancelled` for the vanished old-id projections (same
+      // gap restoreSeries covers for local edits) — refetch each shifted
+      // series so its stale rows drop. Runs BEFORE the new token persists: a
+      // failure retries this whole delta next pass instead of orphaning.
+      for (const masterId of staleMasters) {
+        await restoreSeries(d, cal.id, masterId)
+        changed++
+      }
       s.syncToken = resp.nextSyncToken ?? s.syncToken
       s.pageToken = undefined
       s.lastSyncedAt = Date.now()
@@ -221,8 +232,19 @@ async function syncCalendar(d: DB, cal: CalendarRow, s: SyncStateRow): Promise<b
   return changed > 0
 }
 
-/** Upsert one page of events. Returns count of real changes. */
-async function upsertPage(d: DB, calendarId: string, items: GEvent[], gen: number): Promise<number> {
+/** Upsert one page of events. Returns count of real changes. During an
+ * incremental pass (staleMasters given), also flags series that need a
+ * restoreSeries reconcile: an instance id we've never seen means the master
+ * was retimed/split (its old-id projections just orphaned), and a cancelled
+ * id with local siblings is a deleted master whose projections got no
+ * cancellations of their own. */
+async function upsertPage(
+  d: DB,
+  calendarId: string,
+  items: GEvent[],
+  gen: number,
+  staleMasters?: Set<string>,
+): Promise<number> {
   if (!items.length) return 0
   const tx = d.transaction('events', 'readwrite')
   let changed = 0
@@ -235,7 +257,11 @@ async function upsertPage(d: DB, calendarId: string, items: GEvent[], gen: numbe
         await tx.store.delete(key)
         changed++
       }
+      if (staleMasters && (await tx.store.index('byMaster').count(IDBKeyRange.only(e.id)))) {
+        staleMasters.add(e.id) // restoreSeries will 404 → purge the siblings
+      }
     } else {
+      if (staleMasters && e.recurringEventId && !existing) staleMasters.add(e.recurringEventId)
       if (!existing || existing.etag !== e.etag) changed++
       await tx.store.put(normalizeEvent(e, calendarId, gen)) // always put: baselineGen must advance
     }

@@ -362,12 +362,13 @@ async function purgeSiblings(d: DB, calendarId: string, masterId: string): Promi
 }
 
 /** Refetch a series' instances and make the local rows match exactly. Used
- * after a master op (success OR conflict): incremental sync alone can't fix it,
- * because retiming/truncating a series changes which instance ids exist and
- * Google emits no `cancelled` for the vanished plain projections — so stale
- * local rows would orphan. Rows carrying their own pending per-instance op are
- * left untouched (that edit hasn't flushed yet and owns its row). */
-async function restoreSeries(d: DB, calendarId: string, masterId: string): Promise<void> {
+ * after a master op (success OR conflict) and by incremental sync when a
+ * series' instance ids shift: retiming/truncating a series changes which
+ * instance ids exist and Google emits no `cancelled` for the vanished plain
+ * projections — so stale local rows would orphan. Rows carrying their own
+ * pending per-instance op are left untouched (that edit hasn't flushed yet
+ * and owns its row). */
+export async function restoreSeries(d: DB, calendarId: string, masterId: string): Promise<void> {
   const s = await d.get('syncState', calendarId)
   const gen = s?.baselineGen ?? 0
   const hasOwnOp = async (id: string) => (await opsFor(d, calendarId, id)).length > 0
@@ -389,10 +390,15 @@ async function restoreSeries(d: DB, calendarId: string, masterId: string): Promi
       items.push(...(resp.items ?? []))
       pageToken = resp.nextPageToken
     } while (pageToken)
-  } catch {
-    // Series gone (or unreadable) server-side — drop the local copies.
-    await purgeSiblings(d, calendarId, masterId)
-    return
+  } catch (e) {
+    // Series definitively gone server-side — drop the local copies. Anything
+    // else (rate limit, network, auth) rethrows: purging on a transient error
+    // would vanish healthy events until the next re-baseline.
+    if (e instanceof ApiError && (e.status === 404 || e.status === 410)) {
+      await purgeSiblings(d, calendarId, masterId)
+      return
+    }
+    throw e
   }
   const seen = new Set(items.map((i) => i.id))
   const rows = (await d.getAllFromIndex('events', 'byMaster', IDBKeyRange.only(masterId))).filter(
