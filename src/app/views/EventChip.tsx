@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks'
+import { useRef, useState } from 'preact/hooks'
 import { patchEventScoped, rsvpEvent } from '../../data/outbox'
 import type { EventRow } from '../../data/types'
 import { chipTextColor, EVENT_COLORS, eventColorHex } from '../colors'
@@ -43,11 +43,34 @@ function canEdit(e: EventRow): boolean {
   return true
 }
 
+// Menu box metrics for placement math: fixed width, and the tallest the menu
+// gets (12 static items capped by the CSS max-height).
+const CAT_MENU_W = 200
+const CAT_MENU_H = 280
+
 /** Color + category pill in the hover card; click to reassign the colorId. */
 function CategoryPicker({ ev }: { ev: EventRow }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ left: 0, top: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
   const current = ev.colorId ? EVENT_COLORS[ev.colorId] : undefined
   const calColor = calendarById.value.get(ev.calendarId)?.backgroundColor ?? 'var(--accent)'
+
+  // Fixed-position the menu off the button so it can escape the chip, and
+  // clamp to the viewport: flip above when the bottom would clip, keep the
+  // right edge on screen.
+  const toggle = () => {
+    if (open) {
+      setOpen(false)
+      return
+    }
+    const r = btnRef.current!.getBoundingClientRect()
+    const left = Math.max(8, Math.min(r.right - CAT_MENU_W, window.innerWidth - CAT_MENU_W - 8))
+    let top = r.bottom + 4
+    if (top + CAT_MENU_H > window.innerHeight - 8) top = Math.max(8, r.top - 4 - CAT_MENU_H)
+    setPos({ left, top })
+    setOpen(true)
+  }
 
   const set = (colorId: string) => {
     setOpen(false)
@@ -61,13 +84,13 @@ function CategoryPicker({ ev }: { ev: EventRow }) {
 
   return (
     <div class="cat-pick" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-      <button class="cat-btn" title="Change category" onClick={() => setOpen(!open)}>
+      <button ref={btnRef} class="cat-btn" title="Change category" onClick={toggle}>
         <span class="cat-dot" style={{ background: current?.hex ?? calColor }} />
         <span class="cat-label">{current ? (current.label ?? current.name) : 'Category'}</span>
         <span class="cat-chev">▾</span>
       </button>
       {open && (
-        <div class="cat-menu">
+        <div class="cat-menu" style={{ left: `${pos.left}px`, top: `${pos.top}px` }}>
           <button class={'cat-item' + (!ev.colorId ? ' active' : '')} onClick={() => set('')}>
             <span class="cat-dot" style={{ background: calColor }} />
             Calendar default

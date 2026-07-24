@@ -787,7 +787,10 @@ kbd {
 .cat-chev { font-size: 8px; opacity: 0.8; }
 .cat-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(255,255,255,0.4); }
 .cat-menu {
-  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30;
+  /* Fixed + inline left/top from the picker: viewport-clamped so it never
+   * renders off screen (flips above the button near the bottom edge).
+   * Width/max-height must match CAT_MENU_W/H in EventChip.tsx. */
+  position: fixed; z-index: 30;
   background: var(--bg); color: var(--text);
   border: 1px solid var(--border-strong); border-radius: 10px;
   box-shadow: var(--shadow); padding: 4px; width: 200px;
