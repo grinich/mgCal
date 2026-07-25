@@ -27,7 +27,14 @@ The committed manifest ships a placeholder client ID, so this step is required �
 2. **APIs & Services → Library** → search **Google Calendar API** → Enable.
 3. **APIs & Services → OAuth consent screen** → External → fill in the app name + your email → under **Test users**, add your own Google account email. Leave the app in **Testing** mode (fine for personal use; no verification needed).
 4. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → Application type: **Chrome Extension** → Item ID: `lmkneinmcojelimnmnpenoopnlnlgjng` (or your own ID, if you removed the pinned key).
-5. Replace `YOUR_CLIENT_ID.apps.googleusercontent.com` in `public/manifest.json` under `oauth2.client_id` with the generated client ID, then `npm run build` and hit the reload icon on `chrome://extensions`.
+5. Save the client ID into the manifest, rebuild, and hit the reload icon on `chrome://extensions`:
+
+   ```sh
+   npm run set-client-id 1234567890-abc123.apps.googleusercontent.com
+   npm run build
+   ```
+
+Until you do this, the new tab shows the same steps with a copy button for the Item ID, so you don't need to keep the README open. `set-client-id` edits tracked `public/manifest.json` — `git update-index --skip-worktree public/manifest.json` keeps your ID out of commits.
 
 Chrome-extension OAuth clients have no client secret — Google binds them to the extension ID instead — so the client ID in your manifest isn't sensitive and ships in every build.
 

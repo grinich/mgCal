@@ -683,6 +683,34 @@ kbd {
 .connect-card p { color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
 .connect-card code { font-size: 11px; }
 
+/* First-run setup walkthrough (no OAuth client configured yet) */
+.setup-card { width: 460px; text-align: left; }
+.setup-card .connect-title { text-align: center; }
+.setup-steps {
+  margin: 0 0 4px 18px; padding: 0;
+  display: flex; flex-direction: column; gap: 11px;
+  font-size: 12.5px; line-height: 1.5;
+}
+.setup-steps li { padding-left: 4px; }
+.setup-steps a { color: var(--accent); }
+.setup-id {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; margin-top: 6px; padding: 6px 9px; cursor: pointer;
+  font: inherit; text-align: left;
+  background: var(--bg); border: 1px solid var(--border-strong); border-radius: 6px;
+}
+.setup-id:hover { border-color: var(--accent); }
+.setup-id code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setup-copy { flex: none; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
+.setup-cmd {
+  display: block; margin-top: 6px; padding: 6px 9px;
+  /* --border-strong, not --border: in light mode the block's --bg fill sits on
+     the card's --surface, so the edge is the only thing defining it. */
+  background: var(--bg); border: 1px solid var(--border-strong); border-radius: 6px;
+  font-family: ui-monospace, monospace; user-select: all;
+}
+.setup-foot { margin: 14px 0 0 !important; font-size: 11.5px; }
+
 /* ---------- sync badge (header right, before the view switch) ---------- */
 .sync-badge {
   display: flex; align-items: center; gap: 7px;

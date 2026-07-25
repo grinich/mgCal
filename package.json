@@ -27,6 +27,7 @@
     "version": "node scripts/sync-manifest-version.mjs && npm run build && git add public/manifest.json",
     "watch": "vite build --watch & vite build -c vite.sw.config.ts --watch",
     "typecheck": "tsc --noEmit",
+    "set-client-id": "node scripts/set-client-id.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "vite"
