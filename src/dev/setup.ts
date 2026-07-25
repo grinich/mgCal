@@ -1,12 +1,17 @@
 // Dev-only harness: lets the app page run in a plain browser tab (vite dev on
-// localhost) with a chrome.* shim and seeded data. Real calendar data is used
-// when src/dev/real-events.json exists (gitignored; built by a scratch script
-// from Google Calendar exports), otherwise demo data. Never ships in the
-// extension build — main.tsx only imports this behind import.meta.env.DEV.
+// localhost) with a chrome.* shim and seeded data. Nothing here talks to Google
+// — the shim's getAuthToken returns a fake token and the data is written
+// straight to IndexedDB. Never ships in the extension build; main.tsx only
+// imports this behind import.meta.env.DEV.
+//
+// Seeds from a real calendar export when MGCAL_DEV_EVENTS points at one (see
+// README), otherwise from the synthetic demo data below. Exports live outside
+// the repo so real attendee emails can't be committed.
+import devEvents from 'virtual:mgcal-dev-events'
 import { db, getSetting, normalizeEvent, setSetting } from '../data/db'
 import type { CalendarRow, GAttendee, GEvent } from '../data/types'
 
-interface RealData {
+export interface RealData {
   fetchedAt: string
   calendars: CalendarRow[]
   events: (GEvent & { calendarId: string })[]
@@ -14,16 +19,8 @@ interface RealData {
 
 export async function installDevMode(): Promise<void> {
   installChromeShim()
-  const real = await loadRealData()
-  if (real) await seedReal(real)
+  if (devEvents) await seedReal(devEvents)
   else await seed()
-}
-
-async function loadRealData(): Promise<RealData | null> {
-  const mods = import.meta.glob<{ default: RealData }>('./real-events.json')
-  const loader = mods['./real-events.json']
-  if (!loader) return null
-  return (await loader()).default
 }
 
 async function seedReal(real: RealData): Promise<void> {

@@ -35,6 +35,15 @@ async function loadDebug(): Promise<DebugData> {
   return { rows, ops: await d.getAll('outbox'), totalEvents: await d.count('events') }
 }
 
+/** Google's error strings quote the calendar id (an email) and often the event
+ * summary — strip both before the text can reach a public issue tracker. */
+function redact(msg?: string): string | undefined {
+  if (!msg) return msg
+  return msg
+    .replace(/[\w.+-]+@[\w.-]+\.\w+/g, '<email>')
+    .replace(/["“‘][^"”’]*["”’]/g, '"<text>"')
+}
+
 function phaseBadge(st?: SyncStateRow): { label: string; cls: string } {
   if (!st) return { label: 'not started', cls: 'muted' }
   if (st.error) return { label: 'error', cls: 'err' }
@@ -75,18 +84,31 @@ function Panel() {
             at: new Date().toISOString(),
             authNeeded: authNeeded.value,
             totalEvents: data?.totalEvents,
-            calendars: data?.rows.map((r) => ({
-              id: r.cal.id,
-              summary: r.cal.summary,
+            // Redacted for pasting into public bug reports: calendar ids are
+            // email addresses, and outbox payloads carry event titles,
+            // descriptions and attendee lists. Everything here is shape and
+            // status only — enough to debug sync, with no personal content.
+            calendars: data?.rows.map((r, i) => ({
+              ref: `cal${i}`,
+              kind: r.cal.primary ? 'primary' : r.cal.accessRole,
               hidden: !!r.cal.hidden,
               events: r.count,
               phase: r.st?.phase,
               lastSyncedAt: r.st?.lastSyncedAt,
               baselinedAt: r.st?.baselinedAt,
               hasPageToken: !!r.st?.pageToken,
-              error: r.st?.error,
+              error: redact(r.st?.error),
             })),
-            outbox: data?.ops,
+            outbox: data?.ops.map((op) => ({
+              seq: op.seq,
+              opType: op.opType,
+              master: !!op.master,
+              phase: op.phase,
+              payloadKeys: Object.keys(op.payload),
+              attempts: op.attempts,
+              nextAttemptMs: op.nextAttemptMs,
+              lastError: redact(op.lastError),
+            })),
           },
           null,
           2,
@@ -111,7 +133,13 @@ function Panel() {
           <button class="btn" title="Re-apply Google Calendar's show/hide selections" onClick={resetVisibility}>
             Match Google visibility
           </button>
-          <button class="btn" onClick={copyDebug}>{copied ? 'Copied ✓' : 'Copy debug info'}</button>
+          <button
+            class="btn"
+            title="Sync status only — calendar names, event titles and guest emails are stripped, so it's safe to paste into a bug report"
+            onClick={copyDebug}
+          >
+            {copied ? 'Copied ✓' : 'Copy debug info'}
+          </button>
           <button class="icon-btn" onClick={() => (debugOpen.value = false)}>✕</button>
         </div>
 

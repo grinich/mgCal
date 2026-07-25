@@ -21,18 +21,30 @@ export type DB = IDBPDatabase<GcalDB>
 
 let dbPromise: Promise<DB> | undefined
 
+// Bump DB_VERSION when the schema changes and add a matching `case` below. The
+// cache is disposable — a wrong migration is recoverable by clearing sync tokens
+// and re-baselining — but users' queued outbox writes are NOT, so migrations
+// must never drop the outbox or settings stores.
+const DB_NAME = 'gcal' // unchanged across the mgCal rename: renaming orphans existing caches
+const DB_VERSION = 1
+
 export function db(): Promise<DB> {
-  dbPromise ??= openDB<GcalDB>('gcal', 1, {
-    upgrade(d) {
-      const events = d.createObjectStore('events', { keyPath: ['calendarId', 'id'] })
-      events.createIndex('byStart', 'startMs')
-      events.createIndex('byCalStart', ['calendarId', 'startMs'])
-      events.createIndex('byMaster', 'recurringEventId')
-      d.createObjectStore('calendars', { keyPath: 'id' })
-      const outbox = d.createObjectStore('outbox', { keyPath: 'seq', autoIncrement: true })
-      outbox.createIndex('byEvent', ['calendarId', 'eventId'])
-      d.createObjectStore('syncState', { keyPath: 'calendarId' })
-      d.createObjectStore('settings', { keyPath: 'key' })
+  dbPromise ??= openDB<GcalDB>(DB_NAME, DB_VERSION, {
+    upgrade(d, oldVersion) {
+      // Falls through, so a browser on any older version replays every step.
+      switch (oldVersion) {
+        case 0: {
+          const events = d.createObjectStore('events', { keyPath: ['calendarId', 'id'] })
+          events.createIndex('byStart', 'startMs')
+          events.createIndex('byCalStart', ['calendarId', 'startMs'])
+          events.createIndex('byMaster', 'recurringEventId')
+          d.createObjectStore('calendars', { keyPath: 'id' })
+          const outbox = d.createObjectStore('outbox', { keyPath: 'seq', autoIncrement: true })
+          outbox.createIndex('byEvent', ['calendarId', 'eventId'])
+          d.createObjectStore('syncState', { keyPath: 'calendarId' })
+          d.createObjectStore('settings', { keyPath: 'key' })
+        }
+      }
     },
   })
   return dbPromise

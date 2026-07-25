@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+- Open-sourced under the MIT license.
+- Settings: **Email guests on changes** — turn off to stop Google notifying attendees on every edit (a drag-to-move used to always email the room).
+- Settings: **Check for updates** — turn off the twice-daily GitHub Releases poll, the extension's only non-Google network call.
+- Dropping an `.ics` file now previews what will be imported and asks for confirmation instead of writing to your calendar immediately.
+- "Copy debug info" now exports sync status only — calendar names, event titles and guest emails are stripped, so it's safe to paste into a bug report.
+- The manifest ships a placeholder OAuth client ID; set up your own client per the README.
+- Event description rendering no longer round-trips sanitized HTML through a string, ruling out the mutation-XSS class.
+- `Cmd+Shift+K` reliably focuses an existing calendar tab instead of sometimes opening a duplicate.
+- Added a test suite (recurrence rewriting, `.ics` parsing, version comparison, DST date math) and CI on pull requests.
+
 ## [0.2.0] - 2026-07-17
 
 - Trackpad pinch zooms the time scale (28–140px per hour, cursor-anchored, persisted).

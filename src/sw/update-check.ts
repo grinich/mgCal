@@ -1,13 +1,24 @@
 // Periodically checks GitHub Releases for a newer version and records the
 // result in chrome.storage.local; the UI's UpdateBanner reads it and prompts
 // the user to update when the latest release is newer than the running build.
+import { getPref, PREF_UPDATE_CHECKS } from '../data/prefs'
 import { UPDATE_STORAGE_KEY, type UpdateStatus } from '../data/update'
 
 export const UPDATE_ALARM = 'update-check'
 const CHECK_INTERVAL_MINUTES = 12 * 60 // twice a day
-const RELEASES_API = 'https://api.github.com/repos/grinich/mgCal/releases/latest'
+
+/**
+ * Repository the update banner tracks. Forks should point this at their own
+ * releases (or turn the check off in Settings) — otherwise they'll prompt users
+ * to "update" to an upstream build of a different codebase.
+ */
+const UPDATE_REPO = 'grinich/mgCal'
+const RELEASES_API = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`
 
 export async function checkForUpdate(): Promise<void> {
+  // This is the extension's only non-Google network call, and it discloses the
+  // user's IP to GitHub, so it's switchable in Settings.
+  if (!(await getPref(PREF_UPDATE_CHECKS))) return
   // api.github.com is in host_permissions, so this fetch is CORS-exempt.
   try {
     const res = await fetch(RELEASES_API, { headers: { Accept: 'application/vnd.github+json' } })

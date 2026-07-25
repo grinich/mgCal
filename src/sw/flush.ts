@@ -1,6 +1,7 @@
 import { api, ApiError } from '../google/api'
 import { AuthError } from '../google/auth'
 import { db, getSetting, normalizeEvent, parseGTime, setSetting, shiftGTime, type DB } from '../data/db'
+import { guestNotification } from '../data/prefs'
 import { getCount, replaceCount, stripCount, truncateRecurrence, untilBefore } from '../data/rrule'
 import type { GAttendee, GDateTime, GEvent, OutboxOp, SplitPayload } from '../data/types'
 
@@ -100,6 +101,7 @@ async function execOp(d: DB, op: OutboxOp): Promise<void> {
   }
 
   const sentPayload = JSON.stringify(op.payload)
+  const sendUpdates = await guestNotification()
   let server: GEvent | undefined
 
   switch (op.opType) {
@@ -107,7 +109,7 @@ async function execOp(d: DB, op: OutboxOp): Promise<void> {
       try {
         server = await api<GEvent>(evPath(op), {
           method: 'POST',
-          query: { conferenceDataVersion: 1, sendUpdates: 'all' },
+          query: { conferenceDataVersion: 1, sendUpdates },
           body: op.payload,
         })
       } catch (e) {
@@ -131,14 +133,14 @@ async function execOp(d: DB, op: OutboxOp): Promise<void> {
         }
         server = await api<GEvent>(masterPath, {
           method: 'PATCH',
-          query: { conferenceDataVersion: 1, sendUpdates: 'all' },
+          query: { conferenceDataVersion: 1, sendUpdates },
           body,
           ifMatch: master.etag,
         })
       } else {
         server = await api<GEvent>(`${evPath(op)}/${op.eventId}`, {
           method: 'PATCH',
-          query: { conferenceDataVersion: 1, sendUpdates: 'all' },
+          query: { conferenceDataVersion: 1, sendUpdates },
           body: op.payload,
           ifMatch: op.ifMatchEtag,
         })
@@ -149,7 +151,7 @@ async function execOp(d: DB, op: OutboxOp): Promise<void> {
       try {
         await api<void>(`${evPath(op)}/${op.eventId}`, {
           method: 'DELETE',
-          query: { sendUpdates: 'all' },
+          query: { sendUpdates },
           ifMatch: op.ifMatchEtag,
         })
       } catch (e) {
@@ -274,6 +276,7 @@ async function countInstancesBefore(op: OutboxOp, splitMs: number): Promise<numb
 async function execSplitRecurring(d: DB, op: OutboxOp): Promise<void> {
   const p = op.payload as unknown as SplitPayload
   const masterPath = `${evPath(op)}/${op.eventId}`
+  const sendUpdates = await guestNotification()
 
   if (!op.phase || op.phase < 1) {
     const master = await api<GEvent>(masterPath)
@@ -287,14 +290,14 @@ async function execSplitRecurring(d: DB, op: OutboxOp): Promise<void> {
     if (splitMs <= masterStartMs) {
       if (p.deleteOnly) {
         try {
-          await api<void>(masterPath, { method: 'DELETE', query: { sendUpdates: 'all' }, ifMatch: master.etag })
+          await api<void>(masterPath, { method: 'DELETE', query: { sendUpdates }, ifMatch: master.etag })
         } catch (e) {
           if (!(e instanceof ApiError && (e.status === 404 || e.status === 410))) throw e
         }
       } else {
         await api<GEvent>(masterPath, {
           method: 'PATCH',
-          query: { conferenceDataVersion: 1, sendUpdates: 'all' },
+          query: { conferenceDataVersion: 1, sendUpdates },
           body: { ...p.fields, start: withTz(p.newStart, tz), end: withTz(p.newEnd, tz) },
           ifMatch: master.etag,
         })
@@ -318,7 +321,7 @@ async function execSplitRecurring(d: DB, op: OutboxOp): Promise<void> {
         try {
           await api<GEvent>(evPath(op), {
             method: 'POST',
-            query: { conferenceDataVersion: 1, sendUpdates: 'all' },
+            query: { conferenceDataVersion: 1, sendUpdates },
             body: {
               ...snapshot,
               ...p.fields,
@@ -344,7 +347,7 @@ async function execSplitRecurring(d: DB, op: OutboxOp): Promise<void> {
     const until = untilBefore(p.instanceOriginalStart)
     await api<GEvent>(masterPath, {
       method: 'PATCH',
-      query: { sendUpdates: 'all' },
+      query: { sendUpdates },
       body: { recurrence: truncateRecurrence(fresh.recurrence, until) },
       ifMatch: fresh.etag,
     })

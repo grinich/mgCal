@@ -2,6 +2,11 @@ node_modules/
 dist/
 keys/*.pem
 .DS_Store
-src/dev/real-events.json
 out/
 mgcal-*.zip
+
+# Calendar exports used to seed dev mode. These hold real attendee emails and
+# meeting titles, so they belong outside the repo entirely (see README) — this
+# is only a backstop for anything dropped in by habit.
+real-events.json
+*.ics

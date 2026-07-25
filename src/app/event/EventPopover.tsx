@@ -293,7 +293,7 @@ function Popover({ ev }: { ev: EventRow }) {
       {ev.description && (
         <div class="peek-row">
           <span class="peek-icon"><Icon d={I.notes} /></span>
-          <div class="peek-desc" dangerouslySetInnerHTML={{ __html: sanitize(ev.description) }} />
+          <DescriptionHtml html={ev.description} />
         </div>
       )}
 
@@ -332,13 +332,30 @@ function Popover({ ev }: { ev: EventRow }) {
   )
 }
 
-/** Google descriptions may contain limited HTML; keep only safe inline tags. */
-function sanitize(html: string): string {
+const ALLOWED_TAGS = new Set(['A', 'B', 'I', 'EM', 'STRONG', 'U', 'BR', 'P', 'UL', 'OL', 'LI', 'SPAN', 'DIV'])
+
+/**
+ * Google descriptions may contain limited HTML; keep only safe inline tags.
+ *
+ * Event descriptions are fully attacker-controlled — anyone who can send you an
+ * invite picks their contents — so this returns a live DocumentFragment rather
+ * than an HTML string, and DescriptionHtml appends it directly. Serializing back
+ * to a string and letting the DOM re-parse it is what makes hand-rolled
+ * sanitizers vulnerable to mutation XSS (a tag that survives the allowlist can
+ * re-parse into something else entirely); never reintroduce that round trip.
+ *
+ * Parsing happens inside a <template>, whose content is inert: scripts don't
+ * run and no subresource requests fire while we're inspecting it.
+ */
+function sanitizeDescription(html: string): DocumentFragment {
   const tpl = document.createElement('template')
   tpl.innerHTML = html
-  const ALLOWED = new Set(['A', 'B', 'I', 'EM', 'STRONG', 'U', 'BR', 'P', 'UL', 'OL', 'LI', 'SPAN', 'DIV'])
+  // Snapshot before mutating: unwrapping a node leaves its descendants in place,
+  // and they're already in this list, so each one still gets checked.
   for (const el of [...tpl.content.querySelectorAll('*')]) {
-    if (!ALLOWED.has(el.tagName)) {
+    // Namespaced elements (SVG/MathML) report a case-sensitive tagName and so
+    // never match the uppercase allowlist — they get unwrapped, as intended.
+    if (!ALLOWED_TAGS.has(el.tagName)) {
       el.replaceWith(...el.childNodes)
       continue
     }
@@ -351,5 +368,15 @@ function sanitize(html: string): string {
       el.setAttribute('rel', 'noreferrer')
     }
   }
-  return tpl.innerHTML
+  return tpl.content
+}
+
+function DescriptionHtml({ html }: { html: string }) {
+  const host = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = host.current
+    if (!el) return
+    el.replaceChildren(sanitizeDescription(html))
+  }, [html])
+  return <div class="peek-desc" ref={host} />
 }

@@ -13,5 +13,8 @@
     "isolatedModules": true,
     "skipLibCheck": true
   },
-  "include": ["src"]
+  // Build configs are deliberately excluded: they run in Node, and pulling in
+  // @types/node here would put `process` and friends in scope for the extension
+  // code too. `npm run build` in CI is what validates them.
+  "include": ["src", "test"]
 }

@@ -1,5 +1,7 @@
 import { computed, effect, signal } from '@preact/signals'
+import { loadConflicts } from './conflicts'
 import { db, eventsInRange } from '../../data/db'
+import { getPref, PREF_NOTIFY_GUESTS, PREF_UPDATE_CHECKS, setPref } from '../../data/prefs'
 import type { CalendarRow, EventRow, SyncStateRow } from '../../data/types'
 import { addDays, addMonths, DAY, HOUR, isSameDay, MIN, startOfDay, startOfWeek } from '../time'
 
@@ -54,6 +56,23 @@ export const weekStart = signal<0 | 1>(localStorage.getItem('weekStart') === '1'
 export function setWeekStart(n: 0 | 1): void {
   weekStart.value = n
   localStorage.setItem('weekStart', String(n))
+}
+
+// ---------- prefs the service worker also reads (IndexedDB-backed) ----------
+// Optimistic: the signal flips immediately, the write lands right after. Both
+// default on, matching behavior before the switches existed.
+
+export const notifyGuests = signal<boolean>(true)
+export const updateChecks = signal<boolean>(true)
+
+export async function setNotifyGuests(on: boolean): Promise<void> {
+  notifyGuests.value = on
+  await setPref(PREF_NOTIFY_GUESTS, on)
+}
+
+export async function setUpdateChecks(on: boolean): Promise<void> {
+  updateChecks.value = on
+  await setPref(PREF_UPDATE_CHECKS, on)
 }
 
 // ---------- event editor ----------
@@ -243,7 +262,7 @@ export function initApp(): void {
 
   chrome.runtime.onMessage.addListener((msg: { type?: string; calendarIds?: string[] }) => {
     if (msg?.type === 'write-conflict') {
-      void import('./conflicts').then((m) => m.loadConflicts())
+      void loadConflicts()
       return
     }
     if (msg?.type !== 'db-updated') return
@@ -251,7 +270,7 @@ export function initApp(): void {
     void refreshSyncMeta()
     if (msg.calendarIds?.includes('$calendars')) void refreshCalendars()
   })
-  void import('./conflicts').then((m) => m.loadConflicts())
+  void loadConflicts()
 
   window.addEventListener('gcal-local-write', () => {
     void refreshEvents()
@@ -262,6 +281,9 @@ export function initApp(): void {
   setInterval(() => {
     if (document.visibilityState === 'visible') void refreshSyncMeta()
   }, 2500)
+
+  void getPref(PREF_NOTIFY_GUESTS).then((v) => (notifyGuests.value = v))
+  void getPref(PREF_UPDATE_CHECKS).then((v) => (updateChecks.value = v))
 
   void chrome.storage.local.get('authNeeded').then((v) => (authNeeded.value = !!v.authNeeded))
   chrome.storage.onChanged.addListener((changes) => {

@@ -1,6 +1,26 @@
-import { setWeekStart, settingsOpen, weekStart } from './state/signals'
+import {
+  notifyGuests,
+  setNotifyGuests,
+  setUpdateChecks,
+  setWeekStart,
+  settingsOpen,
+  updateChecks,
+  weekStart,
+} from './state/signals'
 import { applyTheme, getTheme, type Theme } from './theme'
 import { useState } from 'preact/hooks'
+
+function Toggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <div class="view-switch">
+      {[true, false].map((v) => (
+        <button key={String(v)} class={'seg' + (on === v ? ' active' : '')} onClick={() => onChange(v)}>
+          {v ? 'On' : 'Off'}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export function SettingsPanel() {
   const [theme, setTheme] = useState<Theme>(getTheme())
@@ -39,6 +59,20 @@ export function SettingsPanel() {
               </button>
             ))}
           </div>
+        </div>
+        <div class="setting-row">
+          <span>
+            Email guests on changes
+            <small class="setting-sub">Google notifies attendees whenever you edit an event with guests</small>
+          </span>
+          <Toggle on={notifyGuests.value} onChange={(v) => void setNotifyGuests(v)} />
+        </div>
+        <div class="setting-row">
+          <span>
+            Check for updates
+            <small class="setting-sub">Asks GitHub for the latest release twice a day</small>
+          </span>
+          <Toggle on={updateChecks.value} onChange={(v) => void setUpdateChecks(v)} />
         </div>
         <div class="panel-hint">
           Keyboard shortcut to open the calendar from anywhere: configure at{' '}

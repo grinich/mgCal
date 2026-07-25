@@ -59,7 +59,7 @@ function ConnectCard() {
   return (
     <div class="connect-wrap">
       <div class="connect-card">
-        <div class="connect-title">gcal</div>
+        <div class="connect-title">mgCal</div>
         {configured ? (
           <>
             <p>Connect your Google account to load your calendars. Data syncs to a local cache so the app opens instantly.</p>

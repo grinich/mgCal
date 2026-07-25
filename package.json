@@ -1,21 +1,36 @@
 {
-  "name": "gcal",
+  "name": "mgcal",
   "version": "0.2.0",
-  "description": "",
-  "main": "index.js",
+  "description": "A local-first Google Calendar replacement that runs as a Chrome new-tab extension",
+  "license": "MIT",
+  "author": "Michael Grinich",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/grinich/mgCal.git"
+  },
+  "homepage": "https://github.com/grinich/mgCal",
+  "bugs": "https://github.com/grinich/mgCal/issues",
+  "keywords": [
+    "chrome-extension",
+    "google-calendar",
+    "calendar",
+    "local-first",
+    "offline",
+    "preact",
+    "indexeddb"
+  ],
+  "private": true,
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "build": "vite build && vite build -c vite.sw.config.ts",
     "zip": "npm run build && rm -rf out mgcal-*.zip && mkdir -p out/mgcal && cp -R dist/. out/mgcal/ && cd out && zip -qr \"../mgcal-v${npm_package_version}-chrome.zip\" mgcal",
     "version": "node scripts/sync-manifest-version.mjs && npm run build && git add public/manifest.json",
     "watch": "vite build --watch & vite build -c vite.sw.config.ts --watch",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dev": "vite"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
   "dependencies": {
     "@preact/signals": "^2.9.4",
     "idb": "^8.0.3",
@@ -25,6 +40,7 @@
     "@preact/preset-vite": "^2.10.5",
     "@types/chrome": "^0.2.2",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5"
+    "vite": "^8.1.5",
+    "vitest": "^4.0.18"
   }
 }
