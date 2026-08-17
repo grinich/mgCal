@@ -163,12 +163,36 @@ export function layoutLanes(events: EventRow[], days: Date[]): Lane[] {
   return out
 }
 
+/** Where an all-day chip's span lands after dragging `edge` by `n` whole days.
+ * Shifts by calendar days, not n*DAY: a DST week has a 23- or 25-hour day and
+ * an all-day chip has to stay pinned to local midnight across it. Ends are
+ * exclusive, so a one-day event has start === end - 1 day — that's as close as
+ * either edge may come to the other. */
+export function allDayDragSpan(
+  span: { startMs: number; endMs: number },
+  edge: 'move' | 'start' | 'end',
+  n: number,
+): { startMs: number; endMs: number } {
+  const shift = (ms: number, k: number): number => addDays(new Date(ms), k).getTime()
+  if (edge === 'move') return { startMs: shift(span.startMs, n), endMs: shift(span.endMs, n) }
+  if (edge === 'start') {
+    return { startMs: Math.min(shift(span.startMs, n), shift(span.endMs, -1)), endMs: span.endMs }
+  }
+  return { startMs: span.startMs, endMs: Math.max(shift(span.endMs, n), shift(span.startMs, 1)) }
+}
+
+/** Does this event belong in the all-day strip rather than the hour grid?
+ * All-day events plus anything spanning a full day or more. */
+export function inAllDayRow(e: EventRow): boolean {
+  return e.allDay || e.endMs - e.startMs >= DAY
+}
+
 /** Split events into all-day-row events vs timed events. */
 export function splitAllDay(events: EventRow[]): { allDay: EventRow[]; timed: EventRow[] } {
   const allDay: EventRow[] = []
   const timed: EventRow[] = []
   for (const e of events) {
-    if (e.allDay || e.endMs - e.startMs >= DAY) allDay.push(e)
+    if (inAllDayRow(e)) allDay.push(e)
     else timed.push(e)
   }
   return { allDay, timed }

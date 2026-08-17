@@ -1,7 +1,9 @@
 import {
   anchor,
+  authError,
   authNeeded,
   calendars,
+  connecting,
   debugOpen,
   goToday,
   navigate,
@@ -32,6 +34,9 @@ function SyncBadge() {
   if (isDev && states.length === 0) {
     cls = 'muted'
     label = 'Demo data'
+  } else if (connecting.value) {
+    cls = 'busy'
+    label = 'Connecting…'
   } else if (authNeeded.value) {
     cls = 'warn'
     label = 'Reconnect Google'
@@ -109,9 +114,14 @@ export function Header() {
       </div>
       <NowPill />
       <div class="spacer" />
+      {authError.value && (
+        <span class="auth-error" title={authError.value}>
+          {authError.value}
+        </span>
+      )}
       {authNeeded.value && (
-        <button class="btn accent" onClick={() => void connectGoogle()}>
-          Reconnect Google
+        <button class="btn accent" disabled={connecting.value} onClick={() => void connectGoogle()}>
+          {connecting.value ? 'Connecting…' : 'Reconnect Google'}
         </button>
       )}
       <SyncBadge />

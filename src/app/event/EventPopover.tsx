@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { deleteEventScoped, rsvpEvent } from '../../data/outbox'
 import type { EventRow, GAttendee } from '../../data/types'
 import { askScope, calendarById, editor, openEdit, selectedAnchor, selectedEvent, selectedKey } from '../state/signals'
-import { DAY, fmtTime } from '../time'
+import { addDays, fmtTime } from '../time'
 import { chipColor } from '../views/EventChip'
 import { eventColorLabel } from '../colors'
 import { locationHref } from '../location'
@@ -62,7 +62,9 @@ function whenLines(ev: EventRow): [string, string?] {
   const dateOf = (ms: number) =>
     new Date(ms).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
   if (ev.allDay) {
-    const endIncl = ev.endMs - DAY
+    // Step back a calendar day, not 24h: across a spring-forward boundary
+    // endMs - DAY lands at 23:00 the day before and shows the wrong end date.
+    const endIncl = addDays(new Date(ev.endMs), -1).getTime()
     if (endIncl <= ev.startMs) return [s.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }), 'All day']
     return [`${dateOf(ev.startMs)} – ${dateOf(endIncl)}`, 'All day']
   }

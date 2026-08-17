@@ -72,6 +72,7 @@ function installChromeShim(): void {
     identity: {
       getAuthToken: () => Promise.resolve({ token: 'dev-token' }),
       removeCachedAuthToken: () => Promise.resolve(),
+      clearAllCachedAuthTokens: () => Promise.resolve(),
     },
   } as unknown as typeof chrome
 }

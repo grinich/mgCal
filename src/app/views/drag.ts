@@ -3,6 +3,7 @@ import { patchEventScoped } from '../../data/outbox'
 import type { EventRow, GDateTime } from '../../data/types'
 import { askScope, openCreate, selectedKey } from '../state/signals'
 import { addDays, MIN } from '../time'
+import { allDayDragSpan } from './layout'
 
 const SNAP = 15 * MIN
 
@@ -90,6 +91,19 @@ function capturePointer(e: PointerEvent): void {
   }
 }
 
+/** End of an event drag: push the new span, unless the chip landed exactly
+ * where it started (a jiggle, or a drag walked back to the anchor) — that
+ * stays a plain click so selection still toggles. */
+function commitEventDrag(ev: EventRow, cur: EventDrag): void {
+  if (!cur.moved || (cur.startMs === ev.startMs && cur.endMs === ev.endMs)) return
+  justDragged = true
+  setTimeout(() => (justDragged = false), 0)
+  void askScope(ev, 'edit').then((scope) => {
+    if (!scope) return // cancelled: chip snaps back (no local write happened)
+    void patchEventScoped(ev, { start: toGTime(cur.startMs, ev.allDay), end: toGTime(cur.endMs, ev.allDay) }, scope)
+  })
+}
+
 export function startEventDrag(e: PointerEvent, ev: EventRow, mode: 'move' | 'resize', geom: GridGeom): void {
   if (e.button !== 0) return
   e.preventDefault()
@@ -118,19 +132,57 @@ export function startEventDrag(e: PointerEvent, ev: EventRow, mode: 'move' | 're
     setDragging(false)
     const cur = drag.value
     drag.value = null
+    if (cur?.kind === 'event') commitEventDrag(ev, cur)
+  }
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+}
+
+/** Move or resize an existing chip in the all-day strip. The strip's geometry
+ * is whole days, so everything works off a day-index DELTA from the grab
+ * point rather than an absolute day: that keeps a chip whose real start or end
+ * is off-screen (clipsLeft/clipsRight) moving by the amount actually dragged.
+ * `edge` picks what the drag adjusts — the whole span, or one end of it. */
+export function startAllDayEventDrag(
+  e: PointerEvent,
+  ev: EventRow,
+  edge: 'move' | 'start' | 'end',
+  days: Date[],
+  lane: HTMLElement,
+): void {
+  if (e.button !== 0) return
+  e.preventDefault()
+  e.stopPropagation()
+  capturePointer(e)
+  const idxAt = (pe: PointerEvent): number => {
+    const rect = lane.getBoundingClientRect()
+    const i = Math.floor(((pe.clientX - rect.left) / rect.width) * days.length)
+    return Math.max(0, Math.min(days.length - 1, i))
+  }
+  const anchorIdx = idxAt(e)
+  drag.value = {
+    kind: 'event',
+    ev,
+    mode: edge === 'move' ? 'move' : 'resize',
+    startMs: ev.startMs,
+    endMs: ev.endMs,
+    moved: false,
+  }
+  setDragging(true)
+
+  const onMove = (me: PointerEvent) => {
+    const cur = drag.value
     if (cur?.kind !== 'event') return
-    if (cur.moved && (cur.startMs !== ev.startMs || cur.endMs !== ev.endMs)) {
-      justDragged = true
-      setTimeout(() => (justDragged = false), 0)
-      void askScope(ev, 'edit').then((scope) => {
-        if (!scope) return // cancelled: chip snaps back (no local write happened)
-        void patchEventScoped(
-          ev,
-          { start: toGTime(cur.startMs, ev.allDay), end: toGTime(cur.endMs, ev.allDay) },
-          scope,
-        )
-      })
-    }
+    const { startMs, endMs } = allDayDragSpan(ev, edge, idxAt(me) - anchorIdx)
+    if (startMs !== cur.startMs || endMs !== cur.endMs) drag.value = { ...cur, startMs, endMs, moved: true }
+  }
+  const onUp = () => {
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    setDragging(false)
+    const cur = drag.value
+    drag.value = null
+    if (cur?.kind === 'event') commitEventDrag(ev, cur)
   }
   window.addEventListener('pointermove', onMove)
   window.addEventListener('pointerup', onUp)
@@ -147,9 +199,12 @@ export function startAllDayCreateDrag(
   opts?: { gutterPx?: number; clickCreates?: boolean },
 ): void {
   if (e.button !== 0) return
-  capturePointer(e)
   const lane = e.currentTarget as HTMLElement // snapshot: currentTarget is null after dispatch
   const gutter = opts?.gutterPx ?? 0
+  // The gutter is a label, not a day. Without this, a click on the header's
+  // blank corner clamped to index 0 and quick-added an event on the first day.
+  if (e.clientX - lane.getBoundingClientRect().left < gutter) return
+  capturePointer(e)
   const idxAt = (pe: PointerEvent): number => {
     const rect = lane.getBoundingClientRect()
     const i = Math.floor(((pe.clientX - rect.left - gutter) / (rect.width - gutter)) * days.length)

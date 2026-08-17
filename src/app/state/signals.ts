@@ -8,13 +8,41 @@ import { addDays, addMonths, DAY, HOUR, isSameDay, MIN, startOfDay, startOfWeek 
 export type View = 'day' | 'week' | 'month'
 
 export const view = signal<View>((localStorage.getItem('view') as View) || 'week')
-// Every new tab opens on today; navigation only lasts for the tab's lifetime.
-export const anchor = signal<Date>(new Date())
+
+export const weekStart = signal<0 | 1>(localStorage.getItem('weekStart') === '1' ? 1 : 0)
+
+export function setWeekStart(n: 0 | 1): void {
+  weekStart.value = n
+  localStorage.setItem('weekStart', String(n))
+}
+
+/**
+ * Where a fresh tab lands. Normally today, but once the weekend has caught up
+ * with the end of the displayed week there's nothing left in it to plan, so
+ * week view opens on the week ahead. Which days those are depends on where the
+ * week starts: Saturday always trails, Sunday only on Monday-start weeks —
+ * on Sunday-start weeks it opens the week, and jumping would hide the whole
+ * work week just as it's about to begin.
+ *
+ * Day and month views stay on today: a week's jump would land on an arbitrary
+ * day, or on the wrong month entirely.
+ */
+export function initialAnchor(now: Date, v: View, weekStartsOn: 0 | 1): Date {
+  const dow = now.getDay()
+  const trailingWeekend = dow === 6 || (dow === 0 && weekStartsOn === 1)
+  return v === 'week' && trailingWeekend ? addDays(now, 7) : now
+}
+
+// Every new tab opens on today (weekends excepted, see above); navigation only
+// lasts for the tab's lifetime.
+export const anchor = signal<Date>(initialAnchor(new Date(), view.value, weekStart.value))
 export const calendars = signal<CalendarRow[]>([])
 export const events = signal<EventRow[]>([])
 export const nowMs = signal<number>(Date.now())
 export const authNeeded = signal<boolean>(false)
 export const connected = signal<boolean>(true) // false until first calendar list arrives
+export const connecting = signal<boolean>(false) // interactive OAuth in flight
+export const authError = signal<string>('') // why the last Connect/Reconnect failed
 export const sidebarOpen = signal<boolean>(localStorage.getItem('sidebar') === '1')
 export const selectedKey = signal<string | null>(null) // `${calendarId}|${id}`
 export const selectedAnchor = signal<{ x: number; y: number; w: number; h: number } | null>(null)
@@ -50,12 +78,6 @@ export async function setCalendarsHidden(ids: string[], hidden: boolean): Promis
   }
   await tx.done
   await refreshCalendars()
-}
-export const weekStart = signal<0 | 1>(localStorage.getItem('weekStart') === '1' ? 1 : 0)
-
-export function setWeekStart(n: 0 | 1): void {
-  weekStart.value = n
-  localStorage.setItem('weekStart', String(n))
 }
 
 // ---------- prefs the service worker also reads (IndexedDB-backed) ----------
@@ -178,13 +200,16 @@ export interface Range {
 export const range = computed<Range>(() => rangeForView(view.value, anchor.value))
 
 export function rangeForView(v: View, a: Date): Range {
+  // Ends come from calendar arithmetic, not n*DAY: a fall-back week is 169
+  // hours, so +7*DAY stops an hour short and drops anything in Saturday's last
+  // hour; a spring-forward week is 167 and would reach into the next week.
   if (v === 'day') {
     const s = startOfDay(a)
-    return { startMs: s.getTime(), endMs: s.getTime() + DAY }
+    return { startMs: s.getTime(), endMs: addDays(s, 1).getTime() }
   }
   if (v === 'week') {
     const s = startOfWeek(a, weekStart.value)
-    return { startMs: s.getTime(), endMs: s.getTime() + 7 * DAY }
+    return { startMs: s.getTime(), endMs: addDays(s, 7).getTime() }
   }
   // month: full weeks covering the month
   const first = new Date(a.getFullYear(), a.getMonth(), 1)

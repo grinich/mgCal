@@ -2,10 +2,17 @@ import { useLayoutEffect, useRef } from 'preact/hooks'
 import type { EventRow } from '../../data/types'
 import { calendarById, editor, nowMs, openEdit, overflowList, selectedKey, writableCalendars } from '../state/signals'
 import { addDays, DOW, defaultScrollTop, fmtTime, fmtTimeShort, hourH, isSameDay, setHourH, wallHours } from '../time'
-import { layoutDay, layoutLanes, splitAllDay } from './layout'
+import { inAllDayRow, layoutDay, layoutLanes, splitAllDay } from './layout'
 import { chipTextColor } from '../colors'
 import { chipColor, EventChip, eventKey, isDeclined, toggleSelect } from './EventChip'
-import { drag, makeGeom, startAllDayCreateDrag, startCreateDrag, type GridGeom } from './drag'
+import {
+  drag,
+  makeGeom,
+  startAllDayCreateDrag,
+  startAllDayEventDrag,
+  startCreateDrag,
+  type GridGeom,
+} from './drag'
 
 const GUTTER_PX = 52
 
@@ -26,6 +33,7 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
   const { allDay, timed } = splitAllDay(events)
   const scrollRef = useRef<HTMLDivElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
+  const laneRef = useRef<HTMLDivElement>(null) // all-day strip: day columns for chip drags
   const today = new Date(nowMs.value)
   const todayVisible = days.some((d) => isSameDay(d, today))
 
@@ -65,7 +73,23 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
     timeAt: (e) => makeGeom(innerRef.current!, days, GUTTER_PX).timeAt(e),
   }
 
-  const lanes = layoutLanes(allDay, days)
+  const dv = drag.value
+  const ed = editor.value
+
+  // Moving/resizing a strip chip previews by re-laying-out the strip with the
+  // dragged span substituted in — the chip itself follows the cursor and
+  // reshuffles the lanes around it, rather than a ghost floating over a stale
+  // layout (which is what the hour grid does, where chips can't reflow).
+  const moving = dv?.kind === 'event' && inAllDayRow(dv.ev) ? dv : null
+  const movingKey = moving ? eventKey(moving.ev) : null
+  const lanes = layoutLanes(
+    moving
+      ? allDay.map((e) =>
+          eventKey(e) === movingKey ? { ...e, startMs: moving.startMs, endMs: moving.endMs } : e,
+        )
+      : allDay,
+    days,
+  )
   const laneCount = lanes.length ? Math.max(...lanes.map((l) => l.lane)) + 1 : 0
   const cols = `var(--gutter) repeat(${days.length}, 1fr)`
   // The draft chip (Google-style): drawn solid in its own lane from the
@@ -73,8 +97,6 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
   // open for it — it only disappears on save (the optimistic row takes over)
   // or cancel. Sourced from the live drag while dragging, from the editor
   // snapshot after lift-off.
-  const dv = drag.value
-  const ed = editor.value
   let draft: { first: number; last: number } | null = null
   if (dv?.kind === 'create-allday') {
     draft = { first: dv.startIdx, last: dv.endIdx }
@@ -114,6 +136,7 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
         <div class="allday-label">all-day</div>
         <div
           class="allday-lanes"
+          ref={laneRef}
           style={{ height: `${Math.max(laneCount + (draft ? 1 : 0), 1) * 22 + 2}px` }}
           onPointerDown={(e) => e.target === e.currentTarget && startAllDayCreateDrag(e, days)}
         >
@@ -124,7 +147,8 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
                   'lane-chip' +
                   (selectedKey.value === eventKey(l.ev) ? ' selected' : '') +
                   (isDeclined(l.ev) ? ' declined' : '') +
-                  (l.ev.pending ? ' pending' : '')
+                  (l.ev.pending ? ' pending' : '') +
+                  (eventKey(l.ev) === movingKey ? ' dragging' : '')
                 }
                 style={{
                   top: `${l.lane * 22}px`,
@@ -133,6 +157,9 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
                   '--c': chipColor(l.ev),
                   '--ct': chipTextColor(chipColor(l.ev)),
                 }}
+                onPointerDown={(e) =>
+                  laneRef.current && startAllDayEventDrag(e, l.ev, 'move', days, laneRef.current)
+                }
                 onClick={(e) => {
                   e.stopPropagation()
                   toggleSelect(l.ev, e.currentTarget as HTMLElement)
@@ -145,6 +172,24 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
                 {l.clipsLeft ? '… ' : ''}
                 {l.ev.summary || '(no title)'}
                 {l.clipsRight ? ' …' : ''}
+                {/* Only on an edge that's really the event's own: a clipped
+                  * end is just where the week ran out, not something to grab. */}
+                {!l.clipsLeft && (
+                  <div
+                    class="lane-resize start"
+                    onPointerDown={(e) =>
+                      laneRef.current && startAllDayEventDrag(e, l.ev, 'start', days, laneRef.current)
+                    }
+                  />
+                )}
+                {!l.clipsRight && (
+                  <div
+                    class="lane-resize end"
+                    onPointerDown={(e) =>
+                      laneRef.current && startAllDayEventDrag(e, l.ev, 'end', days, laneRef.current)
+                    }
+                  />
+                )}
               </div>
             ))}
           {draft && (
@@ -218,13 +263,15 @@ function DayColumn({
   const ed = editor.value
   let ghost: { top: number; height: number; label: string; color?: string } | null = null
   // Live drag ghost, or (Google-style) the timed create draft held on screen
-  // while the editor is open for it.
+  // while the editor is open for it. All-day drags are excluded — they preview
+  // in place up in the strip, so a ghost down here would be a second copy.
+  const live =
+    d?.kind === 'create' || (d?.kind === 'event' && !inAllDayRow(d.ev)) ? d : null
   const span =
-    d && d.kind !== 'create-allday'
-      ? d
-      : !d && ed?.mode === 'create' && !ed.allDay
-        ? { kind: 'create' as const, startMs: ed.startMs, endMs: ed.endMs }
-        : null
+    live ??
+    (!d && ed?.mode === 'create' && !ed.allDay
+      ? { kind: 'create' as const, startMs: ed.startMs, endMs: ed.endMs }
+      : null)
   if (span && span.startMs < dayEndMs && span.endMs > dayStartMs) {
     const s = Math.max(span.startMs, dayStartMs)
     const e = Math.min(span.endMs, dayEndMs)

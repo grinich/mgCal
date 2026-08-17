@@ -64,12 +64,20 @@ function MonthWeek({
   today: Date
 }) {
   const lanes = layoutLanes(spanning, weekDays)
-  const laneCount = lanes.length ? Math.max(...lanes.map((l) => l.lane)) + 1 : 0
-  const maxSingles = Math.max(0, MAX_ROWS - laneCount)
+  // Reserve per COLUMN, not per row: a day the spanning bars don't reach keeps
+  // those rows for its own timed events. Reserving the row-wide maximum left a
+  // blank gap in every quiet cell and pushed its events into "+N more" — on an
+  // onsite week that hid every timed event on Sat and Sun.
+  const deepest = Array.from({ length: weekDays.length }, () => -1)
+  for (const l of lanes) {
+    for (let c = l.startCol; c < l.startCol + l.span; c++) deepest[c] = Math.max(deepest[c]!, l.lane)
+  }
 
   return (
     <div class="month-week">
-      {weekDays.map((date) => {
+      {weekDays.map((date, col) => {
+        const reserved = deepest[col]! + 1
+        const maxSingles = Math.max(0, MAX_ROWS - reserved)
         const dayStartMs = date.getTime()
         const dayEndMs = addDays(date, 1).getTime()
         const dayEvents = single
@@ -92,7 +100,7 @@ function MonthWeek({
             >
               {date.getDate()}
             </button>
-            {laneCount > 0 && <div style={{ height: `${laneCount * LANE_H}px`, flex: 'none' }} />}
+            {reserved > 0 && <div style={{ height: `${reserved * LANE_H}px`, flex: 'none' }} />}
             {shown.map((ev) => (
               <div
                 key={eventKey(ev)}

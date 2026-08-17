@@ -49,6 +49,17 @@ describe('parseIcs', () => {
     expect(allDay?.end).toEqual({ date: '2026-03-11' })
   })
 
+  it('defaults an all-day DTEND across DST and month ends', () => {
+    const endFor = (ymd: string) =>
+      parseIcs(wrap(['BEGIN:VEVENT', `DTSTART;VALUE=DATE:${ymd}`, 'END:VEVENT'].join('\r\n')))[0]?.end
+    // 2026-03-08 is spring-forward in US zones: a LOCAL +1 day is only 23h, and
+    // rounding that back to a date landed on the start day (zero-length event).
+    expect(endFor('20260308')).toEqual({ date: '2026-03-09' })
+    expect(endFor('20261101')).toEqual({ date: '2026-11-02' }) // fall-back, 25h
+    expect(endFor('20260331')).toEqual({ date: '2026-04-01' }) // month rollover
+    expect(endFor('20261231')).toEqual({ date: '2027-01-01' }) // year rollover
+  })
+
   it('unfolds continuation lines and unescapes text', () => {
     const [ev] = parseIcs(
       wrap(

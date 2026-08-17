@@ -49,9 +49,12 @@ export function parseIcs(text: string): Partial<GEvent>[] {
         if (start && !end) {
           // Default duration: 1h for timed, 1 day (exclusive end) for all-day.
           if (start.date) {
-            const d = new Date(start.date)
-            d.setDate(d.getDate() + 1)
-            end = { date: d.toISOString().slice(0, 10) }
+            // All in UTC: `new Date("YYYY-MM-DD")` is UTC midnight, so stepping
+            // it with the LOCAL setDate/getDate pair moved it by a local day —
+            // 23h across spring-forward, which rounded the end back onto the
+            // start date and left a zero-length event that never rendered.
+            const [y, m, d] = start.date.split('-').map(Number)
+            end = { date: new Date(Date.UTC(y!, m! - 1, d! + 1)).toISOString().slice(0, 10) }
           } else {
             end = { dateTime: new Date(Date.parse(start.dateTime!) + 3600_000).toISOString() }
           }

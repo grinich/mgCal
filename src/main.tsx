@@ -1,6 +1,7 @@
 import { render } from 'preact'
 import './app/app.css'
 import { App } from './app/App'
+import { reanchorForLocalZone } from './data/db'
 import { initApp } from './app/state/signals'
 import { initKeyboard } from './app/keyboard'
 import { initTheme } from './app/theme'
@@ -12,6 +13,10 @@ async function boot() {
   if (import.meta.env.DEV) {
     await (await import('./dev/setup')).installDevMode()
   }
+  // Before the first query: cached all-day midnights belong to whatever zone
+  // computed them, so a zone change has to be repaired ahead of any read.
+  await reanchorForLocalZone()
+
   initApp()
   initKeyboard()
   initTheme()

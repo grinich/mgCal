@@ -4,7 +4,7 @@ import { presetLabel, presetRule, type RecurrencePreset } from '../../data/rrule
 import type { GAttendee, GDateTime, GEvent } from '../../data/types'
 import { EVENT_COLORS } from '../colors'
 import { askScope, calendarById, calendars, editor, selectedKey, weekStart, writableCalendars } from '../state/signals'
-import { DAY, DOW, fmtTime, MIN, startOfDay, startOfWeek } from '../time'
+import { addDays, DOW, fmtTime, MIN, startOfDay, startOfWeek } from '../time'
 import { getKnownEmails } from './emails'
 
 const PRESETS: RecurrencePreset[] = ['none', 'daily', 'weekly', 'weekdays', 'monthly', 'yearly']
@@ -329,9 +329,10 @@ function QuickCreate() {
     close()
   }
 
+  const allDayEndIncl = addDays(new Date(st.endMs), -1).getTime() // exclusive → inclusive
   const when = st.allDay
-    ? st.endMs - DAY > st.startMs
-      ? `${fmtDay(st.startMs)} – ${fmtDay(st.endMs - DAY)}` // exclusive → inclusive end day
+    ? allDayEndIncl > st.startMs
+      ? `${fmtDay(st.startMs)} – ${fmtDay(allDayEndIncl)}`
       : fmtDay(st.startMs)
     : `${fmtDay(st.startMs)} ⋅ ${fmtTime(st.startMs)} – ${fmtTime(st.endMs)}`
 
@@ -379,7 +380,7 @@ function EditorForm() {
   // startMs/endMs are the single source of truth. For all-day, endMs holds the
   // INCLUSIVE end day here; the exclusive day is added back at save time.
   const [startMs, setStartMs] = useState(st.startMs)
-  const [endMs, setEndMs] = useState(st.allDay ? st.endMs - DAY : st.endMs)
+  const [endMs, setEndMs] = useState(st.allDay ? addDays(new Date(st.endMs), -1).getTime() : st.endMs)
   const [calendarId, setCalendarId] = useState(st.calendarId)
   const [location, setLocation] = useState(st.location)
   const [description, setDescription] = useState(st.description)
@@ -429,9 +430,11 @@ function EditorForm() {
     e?.preventDefault()
     let s: number, en: number
     if (allDay) {
+      // Calendar-day steps, not +DAY: a 23- or 25-hour day would otherwise
+      // push the exclusive end to 01:00 or 23:00 instead of local midnight.
       s = startOfDay(new Date(startMs)).getTime()
-      en = startOfDay(new Date(endMs)).getTime() + DAY // exclusive
-      if (en <= s) en = s + DAY
+      en = addDays(startOfDay(new Date(endMs)), 1).getTime() // exclusive
+      if (en <= s) en = addDays(new Date(s), 1).getTime()
     } else {
       s = startMs
       en = endMs > startMs ? endMs : startMs + 15 * MIN

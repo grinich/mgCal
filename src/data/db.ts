@@ -86,6 +86,23 @@ export function parseGTime(t?: { date?: string; dateTime?: string }): number | u
   return undefined
 }
 
+/** Re-derive an all-day row's startMs/endMs against the CURRENT zone, or null
+ * if they already agree.
+ *
+ * Timed events are absolute instants, but an all-day date is timezone-less and
+ * parseGTime pins it to local midnight — so the cached ms only mean anything in
+ * the zone that computed them. Incremental sync rewrites a row only when the
+ * event changes on the server, so once the browser moves zones every untouched
+ * all-day row keeps the old zone's midnights and its chip lands on the wrong
+ * day. The stored Google `date` is zone-free and still authoritative. */
+export function reanchorAllDay(row: EventRow): EventRow | null {
+  if (!row.allDay) return null
+  const startMs = parseGTime(row.start) ?? row.startMs
+  const endMs = parseGTime(row.end) ?? startMs
+  if (startMs === row.startMs && endMs === row.endMs) return null
+  return { ...row, startMs, endMs }
+}
+
 /** Shift a Google date/dateTime by deltaMs, preserving all-day-ness and timeZone.
  * The timeZone must survive: recurring-event writes require start/end.timeZone. */
 export function shiftGTime(
@@ -123,4 +140,26 @@ export async function getSetting<T>(key: string): Promise<T | undefined> {
 export async function setSetting(key: string, value: unknown): Promise<void> {
   const d = await db()
   await d.put('settings', { key, value })
+}
+
+/** Zone the cached all-day midnights were computed in. Unset on caches written
+ * before this existed, which is why the first run always sweeps. */
+const TZ_KEY = 'allDayZone'
+
+/** Repair every cached all-day row after the browser changes timezone (travel,
+ * or an OS zone fix). Cheap and idempotent: it re-derives from each row's own
+ * Google date rather than re-fetching, and no-ops once the zone matches.
+ * Returns how many rows moved. See reanchorAllDay for why this is needed. */
+export async function reanchorForLocalZone(): Promise<number> {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  if ((await getSetting<string>(TZ_KEY)) === zone) return 0
+  const d = await db()
+  const fixed = (await d.getAll('events')).map(reanchorAllDay).filter((r): r is EventRow => r !== null)
+  if (fixed.length) {
+    const tx = d.transaction('events', 'readwrite')
+    await Promise.all(fixed.map((row) => tx.store.put(row)))
+    await tx.done
+  }
+  await setSetting(TZ_KEY, zone)
+  return fixed.length
 }

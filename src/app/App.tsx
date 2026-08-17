@@ -4,7 +4,7 @@ import { UpdateBanner } from './UpdateBanner'
 import { Sidebar } from './Sidebar'
 import { TimeGrid } from './views/TimeGrid'
 import { MonthView } from './views/MonthView'
-import { anchor, connected, helpOpen, view, visibleEvents, weekStart } from './state/signals'
+import { anchor, authError, connected, connecting, helpOpen, view, visibleEvents, weekStart } from './state/signals'
 import { addDays, startOfDay, startOfWeek } from './time'
 import { connectGoogle } from './connect'
 import { isOAuthConfigured } from '../google/auth'
@@ -23,7 +23,13 @@ export function App() {
   const evts = visibleEvents.value
 
   let body
-  if (!connected.value) {
+  if (!isOAuthConfigured()) {
+    // No client ID in this build, so nothing can ever authorize. Check this
+    // before `connected`: a cache left over from a working build keeps
+    // `connected` true and buries the real problem under a Reconnect button
+    // that can only fail.
+    body = <SetupCard />
+  } else if (!connected.value) {
     body = <ConnectCard />
   } else if (v === 'month') {
     body = <MonthView events={evts} />
@@ -56,15 +62,15 @@ export function App() {
 }
 
 function ConnectCard() {
-  if (!isOAuthConfigured()) return <SetupCard />
   return (
     <div class="connect-wrap">
       <div class="connect-card">
         <div class="connect-title">mgCal</div>
         <p>Connect your Google account to load your calendars. Data syncs to a local cache so the app opens instantly.</p>
-        <button class="btn accent" onClick={() => void connectGoogle()}>
-          Connect Google
+        <button class="btn accent" disabled={connecting.value} onClick={() => void connectGoogle()}>
+          {connecting.value ? 'Connecting…' : 'Connect Google'}
         </button>
+        {authError.value && <p class="connect-error">{authError.value}</p>}
       </div>
     </div>
   )
