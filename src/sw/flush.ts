@@ -48,7 +48,7 @@ async function flushInner(): Promise<void> {
       continue
     }
     try {
-      await execOp(d, op)
+      await execOp(d, op, changed)
       changed.add(op.calendarId)
     } catch (e) {
       blocked.add(ek)
@@ -89,7 +89,7 @@ async function opsFor(d: DB, calendarId: string, eventId: string): Promise<Outbo
   return d.getAllFromIndex('outbox', 'byEvent', IDBKeyRange.only([calendarId, eventId]))
 }
 
-async function execOp(d: DB, op: OutboxOp): Promise<void> {
+async function execOp(d: DB, op: OutboxOp, changed: Set<string>): Promise<void> {
   if (op.opType === 'splitRecurring') {
     await execSplitRecurring(d, op)
     // Truncating the old series drops its tail instances, but Google emits no
@@ -160,6 +160,38 @@ async function execOp(d: DB, op: OutboxOp): Promise<void> {
       }
       await d.delete('events', [op.calendarId, op.eventId])
       if (op.master) await purgeSiblings(d, op.calendarId, op.eventId)
+      await d.delete('outbox', op.seq!)
+      return
+    }
+    case 'move': {
+      const dest = op.payload.destination as string
+      let moved: GEvent | undefined
+      try {
+        moved = await api<GEvent>(`${evPath(op)}/${op.eventId}/move`, {
+          method: 'POST',
+          query: { destination: dest, sendUpdates },
+        })
+      } catch (e) {
+        // Gone from the source: a previous attempt already landed. Confirm on
+        // the destination rather than reporting a conflict for our own success.
+        if (!(e instanceof ApiError && (e.status === 404 || e.status === 410))) throw e
+        moved = await api<GEvent>(
+          `/calendars/${encodeURIComponent(dest)}/events/${op.eventId}`,
+        )
+      }
+      await d.delete('events', [op.calendarId, op.eventId])
+      if (moved.status !== 'cancelled') {
+        await d.put('events', normalizeEvent(moved, dest, await genFor(d, dest)))
+      }
+      // Edits queued after the move were addressed to the old calendar (the
+      // row only relocates now); re-point them so they don't 404.
+      for (const r of await opsFor(d, op.calendarId, op.eventId)) {
+        if (r.seq === op.seq) continue
+        r.calendarId = dest
+        if (r.ifMatchEtag) r.ifMatchEtag = moved.etag
+        await d.put('outbox', r)
+      }
+      changed.add(dest)
       await d.delete('outbox', op.seq!)
       return
     }
@@ -445,6 +477,9 @@ async function onConflict(d: DB, op: OutboxOp, message: string): Promise<void> {
     /* deleted or inaccessible */
   }
   const row = await d.get('events', [op.calendarId, op.eventId])
+  // The move never happened, so its optimistic copy on the destination is a
+  // phantom; the source row is restored below like any other rejected edit.
+  if (op.opType === 'move') await d.delete('events', [op.payload.destination as string, op.eventId])
   const isMaster = op.master || !!server?.recurrence?.length
   if (isMaster) {
     // Never store masters as rows; refetch the series so optimistic sibling

@@ -63,7 +63,7 @@ export interface CalendarRow {
   defaultReminders?: { method: string; minutes: number }[]
 }
 
-export type OutboxOpType = 'create' | 'patch' | 'delete' | 'rsvp' | 'splitRecurring'
+export type OutboxOpType = 'create' | 'patch' | 'delete' | 'move' | 'rsvp' | 'splitRecurring'
 
 export interface OutboxOp {
   seq?: number // autoIncrement

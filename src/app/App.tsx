@@ -10,10 +10,9 @@ import { connectGoogle } from './connect'
 import { isOAuthConfigured } from '../google/auth'
 import { HelpOverlay, SettingsPanel } from './SettingsPanel'
 import { EventEditor } from './event/EventEditor'
-import { EventPopover } from './event/EventPopover'
+import { EventPane } from './event/EventPane'
 import { RecurrenceScopeDialog } from './event/RecurrenceScopeDialog'
 import { SearchOverlay } from './search/SearchOverlay'
-import { OverflowPopover } from './views/OverflowPopover'
 import { DropZone } from './DropZone'
 import { SyncDebug } from './SyncDebug'
 import { Toasts } from './Toasts'
@@ -21,6 +20,9 @@ import { Toasts } from './Toasts'
 export function App() {
   const v = view.value
   const evts = visibleEvents.value
+  // The detail pane only makes sense alongside a calendar — not next to the
+  // setup or connect card.
+  const showCalendar = isOAuthConfigured() && connected.value
 
   let body
   if (!isOAuthConfigured()) {
@@ -46,14 +48,13 @@ export function App() {
       <div class="body">
         <Sidebar />
         <main class="main">{body}</main>
+        {showCalendar && <EventPane />}
       </div>
       <SettingsPanel />
       <HelpOverlay open={helpOpen.value} onClose={() => (helpOpen.value = false)} />
-      <EventPopover />
       <EventEditor />
       <RecurrenceScopeDialog />
       <SearchOverlay />
-      <OverflowPopover />
       <SyncDebug />
       <DropZone />
       <Toasts />

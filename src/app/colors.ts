@@ -26,11 +26,6 @@ export function eventColorHex(colorId?: string): string | undefined {
   return colorId ? EVENT_COLORS[colorId]?.hex : undefined
 }
 
-export function eventColorLabel(colorId?: string): string | undefined {
-  const c = colorId ? EVENT_COLORS[colorId] : undefined
-  return c ? (c.label ?? c.name) : undefined
-}
-
 /** Google renders WHITE text on every color of its current palettes — even
  * Banana yellow at ~1.7:1 contrast (Google's call; matched deliberately so
  * chips look identical to Google Calendar). Luminance can't reproduce that

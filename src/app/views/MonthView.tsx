@@ -1,5 +1,5 @@
 import type { EventRow } from '../../data/types'
-import { anchor, range, selectedKey, setAnchor, setView, weekStart } from '../state/signals'
+import { anchor, clearSelection, range, selectedKey, setAnchor, setView, weekStart } from '../state/signals'
 import { addDays, DAY, DOW, fmtTimeShort, isSameDay } from '../time'
 import { chipTextColor } from '../colors'
 import { chipColor, eventKey, isDeclined, toggleSelect } from './EventChip'
@@ -89,7 +89,7 @@ function MonthWeek({
           <div
             key={dayStartMs}
             class={'month-cell' + (date.getMonth() === month ? '' : ' outside')}
-            onClick={() => (selectedKey.value = null)}
+            onClick={clearSelection}
           >
             <button
               class={'month-dom' + (isSameDay(date, today) ? ' today' : '')}
@@ -112,7 +112,7 @@ function MonthWeek({
                 style={{ '--c': chipColor(ev), '--ct': chipTextColor(chipColor(ev)) }}
                 onClick={(e) => {
                   e.stopPropagation()
-                  toggleSelect(ev, e.currentTarget as HTMLElement)
+                  toggleSelect(ev)
                 }}
               >
                 <span class="month-chip-time">{fmtTimeShort(ev.startMs)}</span>
@@ -146,7 +146,7 @@ function MonthWeek({
             }}
             onClick={(e) => {
               e.stopPropagation()
-              toggleSelect(l.ev, e.currentTarget as HTMLElement)
+              toggleSelect(l.ev)
             }}
           >
             {l.clipsLeft ? '… ' : ''}

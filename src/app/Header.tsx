@@ -4,64 +4,61 @@ import {
   authNeeded,
   calendars,
   connecting,
-  debugOpen,
   goToday,
   navigate,
-  outboxCount,
   settingsOpen,
   setView,
-  syncStates,
+  toggleCalendarHidden,
   toggleSidebar,
   view,
 } from './state/signals'
-import { fmtMonthYear, fmtTime, relTime } from './time'
+import { chipTextColor } from './colors'
+import { fmtMonthYear, fmtTime } from './time'
 import { connectGoogle } from './connect'
 import { chipColor, toggleSelect } from './views/EventChip'
 import { currentEvent, JOIN_KEY_HINT, ZoomIcon, ZoomJoinLink, zoomLink } from './zoom'
 
-function SyncBadge() {
-  const isDev = chrome.runtime.id === 'dev-shim'
+/**
+ * Calendars that get a one-click toggle in the header, matched by name. Like
+ * the category labels in colors.ts these are personal — edit them for your own
+ * calendars; a pattern that matches nothing just doesn't render.
+ */
+const QUICK_CALENDARS: { match: RegExp; label: string }[] = [
+  { match: /^MG Work$/i, label: 'Work' },
+  { match: /^MG Personal$/i, label: 'Personal' },
+  { match: /^SF Office Calendar$/i, label: 'SF Office' },
+]
+
+function CalendarToggles() {
   const cals = calendars.value
-  const states = syncStates.value
-  const byCal = new Map(states.map((s) => [s.calendarId, s]))
-  const synced = cals.filter((c) => byCal.get(c.id)?.phase === 'incremental').length
-  const errors = states.filter((s) => s.error).length
-  const pending = outboxCount.value
-  const lastSync = Math.max(0, ...states.map((s) => s.lastSyncedAt ?? 0))
-
-  let cls = 'ok'
-  let label: string
-  if (isDev && states.length === 0) {
-    cls = 'muted'
-    label = 'Demo data'
-  } else if (connecting.value) {
-    cls = 'busy'
-    label = 'Connecting…'
-  } else if (authNeeded.value) {
-    cls = 'warn'
-    label = 'Reconnect Google'
-  } else if (cals.length > 0 && synced < cals.length) {
-    cls = 'busy'
-    label = `Syncing ${synced}/${cals.length} calendars…`
-  } else if (pending > 0) {
-    cls = 'busy'
-    label = `Syncing ${pending} change${pending > 1 ? 's' : ''}…`
-  } else if (errors > 0) {
-    cls = 'warn'
-    label = `${errors} sync issue${errors > 1 ? 's' : ''}`
-  } else {
-    label = 'Up to date'
-  }
-
+  const picked = QUICK_CALENDARS.flatMap((q) => {
+    const cal = cals.find((c) => q.match.test(c.summary))
+    return cal ? [{ label: q.label, cal }] : []
+  })
+  if (!picked.length) return null
   return (
-    <button
-      class={'sync-badge ' + cls}
-      title={(lastSync ? `Last sync ${relTime(lastSync)} · ` : '') + 'Click for sync details'}
-      onClick={() => (debugOpen.value = true)}
-    >
-      {cls === 'busy' ? <span class="badge-spin" /> : <span class="badge-dot" />}
-      {label}
-    </button>
+    <div class="cal-toggles">
+      {picked.map(({ label, cal }) => {
+        const color = cal.backgroundColor ?? 'var(--accent)'
+        return (
+          <button
+            key={cal.id}
+            class={'cal-toggle' + (cal.hidden ? ' off' : '')}
+            style={{ '--c': color, '--ct': chipTextColor(color) }}
+            title={`${cal.hidden ? 'Show' : 'Hide'} ${cal.summary}`}
+            aria-pressed={!cal.hidden}
+            onClick={() => void toggleCalendarHidden(cal.id)}
+          >
+            <span class="cal-check">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 5.3l2 2 4-4.6" />
+              </svg>
+            </span>
+            {label}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -74,8 +71,8 @@ function NowPill() {
     <div class="now-center">
       <button
         class="now-pill"
-        title="Show event details"
-        onClick={(e) => toggleSelect(cur, e.currentTarget as HTMLElement)}
+        title="Show event details (t)"
+        onClick={() => toggleSelect(cur)}
       >
         <span class="now-cal-dot" style={{ background: chipColor(cur) }} />
         <span class="now-title">{cur.summary || '(no title)'}</span>
@@ -101,7 +98,7 @@ export function Header() {
         </svg>
       </button>
       <span class="title">{fmtMonthYear(anchor.value)}</span>
-      <button class="btn" title="Today (t)" onClick={goToday}>
+      <button class="btn" title="Today (g)" onClick={goToday}>
         Today
       </button>
       <div class="nav-btns">
@@ -124,7 +121,7 @@ export function Header() {
           {connecting.value ? 'Connecting…' : 'Reconnect Google'}
         </button>
       )}
-      <SyncBadge />
+      <CalendarToggles />
       <div class="view-switch">
         {(['day', 'week', 'month'] as const).map((v) => (
           <button key={v} class={'seg' + (view.value === v ? ' active' : '')} onClick={() => setView(v)}>
@@ -133,9 +130,12 @@ export function Header() {
         ))}
       </div>
       <button class="icon-btn" title="Settings" onClick={() => (settingsOpen.value = !settingsOpen.value)}>
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
-          <circle cx="8" cy="8" r="2.5" />
-          <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4" stroke-linecap="round" />
+        {/* Ring + stubby teeth + hub: a cog. The old circle-and-spokes read
+            as a sun. */}
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="8" cy="8" r="4.4" />
+          <circle cx="8" cy="8" r="1.5" />
+          <path d="M12.4 8h2 M11.11 11.11l1.42 1.42 M8 12.4v2 M4.89 11.11l-1.42 1.42 M3.6 8h-2 M4.89 4.89L3.47 3.47 M8 3.6v-2 M11.11 4.89l1.42-1.42" />
         </svg>
       </button>
     </header>

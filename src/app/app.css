@@ -35,6 +35,25 @@
 }
 .icon-btn:hover { background: var(--surface); color: var(--text); }
 .nav-btns { display: flex; gap: 2px; }
+/* Header quick toggles for a few calendars (see QUICK_CALENDARS). */
+.cal-toggles { display: flex; align-items: center; gap: 1px; }
+.cal-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 12px; color: var(--text);
+  background: none; border: none; border-radius: 7px;
+  padding: 4px 8px; cursor: pointer; white-space: nowrap;
+}
+.cal-toggle:hover { background: var(--surface); }
+.cal-toggle.off { color: var(--text-muted); }
+.cal-check {
+  width: 14px; height: 14px; flex: none; border-radius: 4px;
+  background: var(--c); color: var(--ct, #fff);
+  display: flex; align-items: center; justify-content: center;
+}
+.cal-toggle.off .cal-check {
+  background: transparent; color: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--c);
+}
 .view-switch {
   display: flex; background: var(--surface); border-radius: 7px; padding: 2px; gap: 2px;
 }
@@ -179,11 +198,7 @@
   transition: box-shadow 0.1s;
   box-shadow: 0 0 0 1px var(--bg); /* crisp edge where cascaded chips overlap */
 }
-/* The title row is the always-visible "tab"; hovering pops a detail card
- * BELOW it, so the tabs of neighboring events on the same row stay reachable
- * as the cursor travels across. */
 .chip:hover {
-  overflow: visible; /* let the card escape the chip bounds */
   box-shadow: 0 0 0 1px var(--bg), 0 2px 8px rgba(0, 0, 0, 0.18);
   z-index: 19;
 }
@@ -195,8 +210,6 @@
   box-shadow: inset 0 0 0 1.5px var(--c), 0 0 0 1px var(--bg);
 }
 .chip.declined { opacity: 0.75; }
-/* The hover card is a child, so the declined fade would make it see-through —
- * go fully opaque while hovered. */
 .chip.declined:hover { opacity: 1; }
 .chip.declined .chip-title { text-decoration: line-through; }
 .chip.tentative {
@@ -209,64 +222,25 @@
     color-mix(in srgb, var(--c) 72%, var(--bg)) 10px
   );
 }
-.chip-card {
-  display: none;
-  position: absolute; top: 19px; left: -1px;
-  min-width: calc(100% + 2px); width: max-content; max-width: 320px;
-  background: inherit;
-  color: inherit;
-  border-radius: 0 6px 6px 6px;
-  padding: 3px 9px 5px 6px;
-  box-shadow: 0 0 0 1px var(--bg), 0 8px 22px rgba(0, 0, 0, 0.24);
-  cursor: default;
-}
-.chip.needs-action .chip-card, .chip.declined .chip-card {
-  box-shadow: inset 0 0 0 1.5px var(--c), 0 0 0 1px var(--bg), 0 8px 22px rgba(0, 0, 0, 0.24);
-}
-.chip:hover .chip-card { display: block; }
-.chip.dragging .chip-card { display: none; }
-/* No hover cards anywhere while a drag is live — they'd pop under the moving
- * cursor and bury the drop target. */
-body.ev-dragging .chip-card { display: none !important; }
 body.ev-dragging .chip, body.ev-dragging .day-col, body.ev-dragging .lane-chip { cursor: grabbing; }
-.chip-card-title {
-  font-size: 12px; font-weight: 600; line-height: 1.3;
-  white-space: normal; word-break: break-word;
-}
-.chip-card-loc { font-size: 11px; opacity: 0.85; white-space: normal; word-break: break-word; }
 .chip.compact .chip-time, .chip.compact .chip-loc { display: none; }
-.chip.compact .chip-card .chip-time { display: block; }
 .chip.selected { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 18; }
 .chip-title {
   font-size: var(--chip-fs, 12px); font-weight: 550; line-height: 1.25;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* Shorter than one text line: no vertical padding, text hugs the chip. The
- * hover card resets to normal size (its children set explicit font sizes). */
+/* Shorter than one text line: no vertical padding, text hugs the chip. */
 .chip.tiny { padding: 0 6px; }
 .chip.tiny .chip-title { line-height: 1.05; }
-.chip.tiny .chip-card .chip-title { font-size: 12px; line-height: 1.25; }
 .chip-time { font-size: 11px; opacity: 0.85; }
 .chip-loc {
   display: block; font-size: 11px; opacity: 0.85;
   color: inherit; text-decoration: none;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.chip-loc:hover, .chip-card-loc:hover { text-decoration: underline; opacity: 1; }
-.chip-card-loc { display: block; color: inherit; text-decoration: none; }
-.chip-card-rsvp { display: flex; align-items: center; gap: 5px; margin: 5px 0 2px; }
-.chip-rsvp-label { font-size: 10px; opacity: 0.8; margin-right: 2px; }
-.chip-rsvp-btn {
-  font: inherit; font-size: 10px; font-weight: 600;
-  color: inherit; background: transparent;
-  border: 1px solid currentColor; border-radius: 10px;
-  padding: 1px 9px; cursor: pointer; opacity: 0.85;
-}
-.chip-rsvp-btn:hover { opacity: 1; }
-.chip-rsvp-btn.active { background: var(--ct, #fff); color: var(--c); border-color: transparent; opacity: 1; }
-.chip.needs-action .chip-rsvp-btn.active, .chip.declined .chip-rsvp-btn.active { background: var(--c); color: var(--ct, #fff); }
-.peek-loc-link { color: var(--text); text-decoration: none; }
-.peek-loc-link:hover { color: var(--accent); text-decoration: underline; }
+.chip-loc:hover { text-decoration: underline; opacity: 1; }
+.detail-loc-link { color: var(--text); text-decoration: none; }
+.detail-loc-link:hover { color: var(--accent); text-decoration: underline; }
 .chip.pending::after, .lane-chip.pending::after {
   content: ''; position: absolute; top: 3px; right: 3px;
   width: 6px; height: 6px; border-radius: 50%;
@@ -296,29 +270,6 @@ body.ev-dragging .chip, body.ev-dragging .day-col, body.ev-dragging .lane-chip {
 .lane-resize.end { right: 0; }
 
 /* ---------- overflow (+N) pill ---------- */
-.chip-more {
-  position: absolute; right: 1px; width: max(10%, 24px); z-index: 12;
-  font: inherit; font-size: 10px; font-weight: 700; color: var(--text-muted);
-  background: var(--surface); border: 1px solid var(--border-strong);
-  border-radius: 4px; cursor: pointer; padding: 0;
-  display: flex; align-items: center; justify-content: center;
-}
-.chip-more:hover { color: var(--text); background: var(--bg); z-index: 19; }
-
-.more-pop {
-  position: fixed; z-index: 45; max-height: 50vh; overflow-y: auto;
-  background: var(--bg); border: 1px solid var(--border-strong);
-  border-radius: 10px; box-shadow: var(--shadow); padding: 4px;
-  display: flex; flex-direction: column;
-}
-.more-row {
-  font: inherit; color: var(--text); background: none; border: none;
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 8px; border-radius: 6px; cursor: pointer; text-align: left;
-}
-.more-row:hover { background: var(--surface); }
-.more-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.more-time { color: var(--text-muted); font-size: 11px; flex: none; }
 .declined-text { text-decoration: line-through; color: var(--text-muted); }
 
 /* ---------- month view ---------- */
@@ -415,106 +366,129 @@ body.ev-dragging .chip, body.ev-dragging .day-col, body.ev-dragging .lane-chip {
 .btn.danger { color: #d93025; border-color: color-mix(in srgb, #d93025 40%, var(--border-strong)); }
 .btn.danger:hover { background: color-mix(in srgb, #d93025 8%, var(--bg)); }
 
-/* ---------- event peek ---------- */
-.peek {
-  position: fixed; z-index: 40;
-  max-height: calc(100vh - 24px); overflow-y: auto;
-  background: var(--bg); border: 1px solid var(--border-strong);
-  border-radius: 14px; box-shadow: var(--shadow); padding: 10px 16px 14px;
-  display: flex; flex-direction: column; gap: 10px;
+/* ---------- event detail pane ---------- */
+/* Shares the flex row with the grid rather than floating over it, so opening
+ * an event narrows the days instead of hiding some of them. */
+.detail-pane {
+  width: clamp(300px, 26vw, 372px); flex: none;
+  display: flex; flex-direction: column; min-height: 0;
+  border-left: 1px solid var(--border); background: var(--bg);
 }
+/* Reserves its height even while empty, so the content below doesn't jump
+ * up and back down as the selection changes. */
+.detail-toolbar {
+  flex: none; display: flex; align-items: center; gap: 2px;
+  height: 34px; padding: 6px 10px 0 12px;
+}
+.detail-empty {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px;
+  padding: 0 24px 40px; text-align: center; color: var(--text-muted);
+}
+.detail-empty p { font-size: 12px; line-height: 1.6; }
+.detail-empty kbd { margin: 0 1px; }
+/* The edit form fills the pane and scrolls on its own, same as the read view. */
+.detail-body, .detail-form {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 6px 16px 16px;
+}
+.detail-body { display: flex; flex-direction: column; gap: 10px; }
+/* Two side-by-side date+time columns don't fit the pane; stack them. */
+.detail-pane .when-grid { grid-template-columns: 1fr; gap: 0; }
+/* No room for the ⌘↵ hint next to three buttons; the modal still shows it. */
+.detail-pane .editor-hint { display: none; }
 .muted { color: var(--text-muted); }
 
-.peek-toolbar { display: flex; justify-content: flex-end; gap: 2px; margin: 0 -8px -4px 0; }
-.peek-toolbar-sep { width: 6px; }
+.detail-head { display: flex; gap: 12px; }
+.detail-swatch { width: 4px; border-radius: 2px; background: var(--c); flex: none; align-self: stretch; }
+.detail-head-text { min-width: 0; }
+.detail-title { font-size: 16px; font-weight: 650; line-height: 1.25; letter-spacing: -0.2px; word-break: break-word; }
+.detail-date { color: var(--text); margin-top: 3px; }
+.detail-timerange { color: var(--text-muted); margin-top: 1px; }
 
-.peek-head { display: flex; gap: 12px; }
-.peek-swatch { width: 4px; border-radius: 2px; background: var(--c); flex: none; align-self: stretch; }
-.peek-head-text { min-width: 0; }
-.peek-title { font-size: 16px; font-weight: 650; line-height: 1.25; letter-spacing: -0.2px; word-break: break-word; }
-.peek-date { color: var(--text); margin-top: 3px; }
-.peek-timerange { color: var(--text-muted); margin-top: 1px; }
-
-.peek-row { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
-.peek-icon {
+.detail-row { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
+.detail-icon {
   width: 16px; flex: none; display: flex; justify-content: center;
   color: var(--text-muted); margin-top: 1px;
 }
-.peek-row-text { min-width: 0; word-break: break-word; line-height: 1.4; }
+.detail-row-text { min-width: 0; word-break: break-word; line-height: 1.4; }
 
-.peek-meet {
+.detail-meet {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   background: var(--accent); color: #fff; text-decoration: none;
   border-radius: 8px; padding: 8px; font-weight: 600;
 }
-.peek-meet:hover { filter: brightness(1.08); }
-.peek-meet.zoom { background: #2d8cff; }
+.detail-meet:hover { filter: brightness(1.08); }
+.detail-meet.zoom { background: #2d8cff; }
 
-.peek-guests { min-width: 0; flex: 1; }
-.peek-guest-summary {
+.detail-guests { min-width: 0; flex: 1; }
+.detail-guest-summary {
   font: inherit; font-weight: 600; color: var(--text);
   background: none; border: none; padding: 0; text-align: left; width: 100%;
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
 }
-.peek-guest-summary:not(:disabled) { cursor: pointer; }
-.peek-guest-summary .muted { font-weight: 400; font-size: 12px; }
-.peek-chevron {
+.detail-guest-summary:not(:disabled) { cursor: pointer; }
+.detail-guest-summary .muted { font-weight: 400; font-size: 12px; }
+.detail-chevron {
   display: inline-flex; color: var(--text-muted);
   transition: transform 0.15s ease; margin-left: auto;
 }
-.peek-chevron.open { transform: rotate(180deg); }
-.peek-avatar-group { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border-strong); }
-.peek-guest-btn {
+.detail-chevron.open { transform: rotate(180deg); }
+.detail-avatar-group { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border-strong); }
+.detail-guest-btn {
   font: inherit; color: var(--text); background: none; border: none;
   padding: 0; width: 100%; cursor: pointer; text-align: left;
 }
-.peek-members { max-height: 150px; overflow-y: auto; margin: 2px 0 4px; }
-.peek-member {
+.detail-members { max-height: 150px; overflow-y: auto; margin: 2px 0 4px; }
+.detail-member {
   display: flex; align-items: center; gap: 8px;
   padding: 2px 0 2px 30px; font-size: 12px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.peek-avatar-sm { width: 16px; height: 16px; font-size: 7px; flex: none; }
-.peek-more-btn {
+.detail-avatar-sm { width: 16px; height: 16px; font-size: 7px; flex: none; }
+.detail-more-btn {
   font: inherit; font-size: 12px; color: var(--text-muted);
   background: none; border: none; padding: 2px 0; cursor: pointer;
   display: flex; align-items: center; gap: 6px; text-align: left;
 }
-.peek-more-btn:hover { color: var(--text); }
-.peek-more-btn .peek-chevron { margin-left: 0; }
-.peek-guest-list { margin-top: 6px; display: flex; flex-direction: column; gap: 5px; }
-.peek-guest { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.peek-avatar {
+.detail-more-btn:hover { color: var(--text); }
+.detail-more-btn .detail-chevron { margin-left: 0; }
+.detail-guest-list { margin-top: 6px; display: flex; flex-direction: column; gap: 5px; }
+.detail-guest { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.detail-avatar {
   position: relative; width: 22px; height: 22px; flex: none;
   border-radius: 50%; color: #fff; font-size: 9px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
-.peek-rsvp-dot {
+.detail-rsvp-dot {
   position: absolute; right: -2px; bottom: -2px;
   width: 9px; height: 9px; border-radius: 50%;
   border: 2px solid var(--bg); background: var(--text-faint);
 }
-.peek-rsvp-dot.accepted { background: #1e9e4a; }
-.peek-rsvp-dot.declined { background: #d93025; }
-.peek-rsvp-dot.tentative { background: #f6bf26; }
-.peek-guest-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.peek-guest-name.declined { text-decoration: line-through; color: var(--text-muted); }
-.peek-guest-tag {
+.detail-rsvp-dot.accepted { background: #1e9e4a; }
+.detail-rsvp-dot.declined { background: #d93025; }
+.detail-rsvp-dot.tentative { background: #f6bf26; }
+.detail-guest-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-guest-name.declined { text-decoration: line-through; color: var(--text-muted); }
+.detail-guest-tag {
   font-size: 10px; color: var(--text-muted); background: var(--surface);
   border-radius: 4px; padding: 1px 5px; flex: none;
 }
-.peek-more { font-size: 12px; padding-left: 30px; }
+.detail-more { font-size: 12px; padding-left: 30px; }
 
-.peek-desc {
+/* No height cap and no scroller of its own: notes run to their full length
+ * and the pane is the one thing that scrolls. */
+.detail-desc {
   color: var(--text); font-size: 12.5px; line-height: 1.5;
-  word-break: break-word; max-height: 130px; overflow-y: auto; min-width: 0;
+  word-break: break-word; min-width: 0;
 }
-.peek-desc a { color: var(--accent); }
-.peek-desc p { margin-bottom: 4px; }
+.detail-desc a { color: var(--accent); }
+.detail-desc p { margin-bottom: 4px; }
 
-.peek-rsvp-bar {
-  display: flex; align-items: center; justify-content: space-between;
-  border-top: 1px solid var(--border); padding-top: 10px; margin-top: 2px;
+/* Footer of the pane, outside the scroller. */
+.detail-rsvp-bar {
+  flex: none; display: flex; align-items: center; justify-content: space-between;
+  border-top: 1px solid var(--border); padding: 10px 16px; background: var(--bg);
 }
 
 /* ---------- color picker ---------- */
@@ -536,6 +510,7 @@ body.ev-dragging .chip, body.ev-dragging .day-col, body.ev-dragging .lane-chip {
 
 /* 15-minute time dropdown under the editor's time inputs. */
 .time-field { position: relative; }
+.time-menu { min-width: 100%; }
 .time-menu {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
   width: 108px; max-height: 208px; overflow-y: auto;
@@ -554,8 +529,17 @@ body.ev-dragging .chip, body.ev-dragging .day-col, body.ev-dragging .lane-chip {
   color: var(--accent); font-weight: 600;
 }
 
-.peek-color-tag { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; }
-.peek-color-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); display: inline-block; }
+.detail-color-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); display: inline-block; }
+/* Calendar + category pickers in the read view: they read as the plain muted
+ * lines they replaced until you reach for them. */
+.detail-select {
+  font: inherit; color: var(--text-muted); flex: 1; min-width: 0;
+  background: none; border: 1px solid transparent; border-radius: 6px;
+  padding: 1px 4px; margin: -1px -4px; cursor: pointer;
+}
+.detail-select:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text); }
+.detail-select:focus { outline: none; border-color: var(--accent); color: var(--text); }
+.detail-select:disabled { cursor: default; color: var(--text-faint); }
 
 /* ---------- guest picker ---------- */
 .guest-box {
@@ -830,41 +814,6 @@ kbd {
 }
 .bulk-btn:hover { color: var(--text); background: var(--surface); }
 
-/* ---------- category picker (hover card) ---------- */
-.chip-card-row1 { display: flex; align-items: flex-start; gap: 8px; }
-.chip-card-row1 .chip-card-title { flex: 1; min-width: 0; }
-.cat-pick { position: relative; flex: none; }
-.cat-btn {
-  display: flex; align-items: center; gap: 5px;
-  font: inherit; font-size: 10px; font-weight: 600; color: inherit;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
-  border-radius: 10px; padding: 2px 8px; cursor: pointer;
-  max-width: 140px;
-}
-.cat-btn:hover { background: color-mix(in srgb, currentColor 20%, transparent); }
-.cat-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cat-chev { font-size: 8px; opacity: 0.8; }
-.cat-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(255,255,255,0.4); }
-.cat-menu {
-  /* Fixed + inline left/top from the picker: viewport-clamped so it never
-   * renders off screen (flips above the button near the bottom edge).
-   * Width/max-height must match CAT_MENU_W/H in EventChip.tsx. */
-  position: fixed; z-index: 30;
-  background: var(--bg); color: var(--text);
-  border: 1px solid var(--border-strong); border-radius: 10px;
-  box-shadow: var(--shadow); padding: 4px; width: 200px;
-  max-height: 280px; overflow-y: auto;
-}
-.cat-item {
-  display: flex; align-items: center; gap: 9px; width: 100%;
-  font: inherit; font-size: 12px; color: var(--text); text-align: left;
-  background: none; border: none; border-radius: 6px;
-  padding: 5px 8px; cursor: pointer;
-}
-.cat-item:hover { background: var(--surface); }
-.cat-item.active { font-weight: 700; }
-
 /* ---------- large editor with inline pickers ---------- */
 /* Sized for the compact field rows (the mini-month lives in a popover now). */
 .editor-lg { width: 540px; max-width: 94vw; max-height: 92vh; overflow-y: auto; }
@@ -888,8 +837,13 @@ kbd {
 @keyframes field-shake {
   25% { transform: translateX(-2px); } 75% { transform: translateX(2px); }
 }
-.date-input { flex: 1.4; }
-.time-input { flex: 1; }
+/* The flex children here are the field wrappers, not the inputs — size those,
+ * and let them shrink past the input's intrinsic width or a narrow column
+ * (the detail pane) overflows instead of squeezing. */
+.when-fields > * { min-width: 0; }
+.date-field { flex: 1.4; }
+.time-field { flex: 1; }
+.date-input, .time-input { width: 100%; }
 
 .date-field { position: relative; }
 .date-menu {
@@ -920,8 +874,3 @@ kbd {
 .mini-cell.today { font-weight: 800; color: var(--accent); }
 .mini-cell.selected { background: var(--accent); color: #fff; }
 .editor-hint { font-size: 11px; margin-right: 6px; }
-
-/* An open category menu must beat the peek popover (z 40) and survive
- * the cursor being over the menu rather than the chip body. */
-.chip:has(.cat-menu) { overflow: visible; z-index: 45; }
-.chip:has(.cat-menu) .chip-card { display: block; }

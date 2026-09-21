@@ -45,11 +45,6 @@ export const connecting = signal<boolean>(false) // interactive OAuth in flight
 export const authError = signal<string>('') // why the last Connect/Reconnect failed
 export const sidebarOpen = signal<boolean>(localStorage.getItem('sidebar') === '1')
 export const selectedKey = signal<string | null>(null) // `${calendarId}|${id}`
-export const selectedAnchor = signal<{ x: number; y: number; w: number; h: number } | null>(null)
-export const overflowList = signal<{
-  events: EventRow[]
-  anchor: { x: number; y: number; w: number; h: number }
-} | null>(null)
 export const helpOpen = signal<boolean>(false)
 export const settingsOpen = signal<boolean>(false)
 export const searchOpen = signal<boolean>(false)
@@ -146,6 +141,8 @@ export function openCreate(startMs?: number, endMs?: number, allDay = false, qui
 }
 
 export function openEdit(ev: EventRow): void {
+  // The detail pane hosts the edit form, so editing implies selecting.
+  selectedKey.value = `${ev.calendarId}|${ev.id}`
   editor.value = {
     mode: 'edit',
     original: ev,
@@ -163,6 +160,20 @@ export function selectedEvent(): EventRow | undefined {
   const key = selectedKey.value
   if (!key) return undefined
   return visibleEvents.value.find((e) => `${e.calendarId}|${e.id}` === key)
+}
+
+/** Point the pane at another event (or nothing). Moving off an event
+ * abandons a half-finished edit of it — the pane only holds one at a time. */
+export function setSelected(key: string | null): void {
+  if (key !== selectedKey.value && editor.value?.mode === 'edit') editor.value = null
+  selectedKey.value = key
+}
+
+/** Deselect from a click on empty calendar space. A pane mid-edit stays put:
+ * a stray click shouldn't throw away what's been typed into it. */
+export function clearSelection(): void {
+  if (editor.value?.mode === 'edit') return
+  selectedKey.value = null
 }
 
 // ---------- recurring scope dialog ----------

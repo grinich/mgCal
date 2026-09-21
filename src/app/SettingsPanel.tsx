@@ -1,14 +1,72 @@
 import {
+  authNeeded,
+  calendars,
+  connecting,
+  debugOpen,
   notifyGuests,
+  outboxCount,
   setNotifyGuests,
   setUpdateChecks,
   setWeekStart,
   settingsOpen,
+  syncStates,
   updateChecks,
   weekStart,
 } from './state/signals'
 import { applyTheme, getTheme, type Theme } from './theme'
+import { relTime } from './time'
 import { useState } from 'preact/hooks'
+
+/** Live sync state. It used to sit in the header, but it's status rather than
+ * a control — the only thing to do with it is open the sync details. */
+function SyncBadge() {
+  const isDev = chrome.runtime.id === 'dev-shim'
+  const cals = calendars.value
+  const states = syncStates.value
+  const byCal = new Map(states.map((s) => [s.calendarId, s]))
+  const synced = cals.filter((c) => byCal.get(c.id)?.phase === 'incremental').length
+  const errors = states.filter((s) => s.error).length
+  const pending = outboxCount.value
+  const lastSync = Math.max(0, ...states.map((s) => s.lastSyncedAt ?? 0))
+
+  let cls = 'ok'
+  let label: string
+  if (isDev && states.length === 0) {
+    cls = 'muted'
+    label = 'Demo data'
+  } else if (connecting.value) {
+    cls = 'busy'
+    label = 'Connecting…'
+  } else if (authNeeded.value) {
+    cls = 'warn'
+    label = 'Reconnect Google'
+  } else if (cals.length > 0 && synced < cals.length) {
+    cls = 'busy'
+    label = `Syncing ${synced}/${cals.length} calendars…`
+  } else if (pending > 0) {
+    cls = 'busy'
+    label = `Syncing ${pending} change${pending > 1 ? 's' : ''}…`
+  } else if (errors > 0) {
+    cls = 'warn'
+    label = `${errors} sync issue${errors > 1 ? 's' : ''}`
+  } else {
+    label = 'Up to date'
+  }
+
+  return (
+    <button
+      class={'sync-badge ' + cls}
+      title={(lastSync ? `Last sync ${relTime(lastSync)} · ` : '') + 'Click for sync details'}
+      onClick={() => {
+        settingsOpen.value = false
+        debugOpen.value = true
+      }}
+    >
+      {cls === 'busy' ? <span class="badge-spin" /> : <span class="badge-dot" />}
+      {label}
+    </button>
+  )
+}
 
 function Toggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
   return (
@@ -29,6 +87,13 @@ export function SettingsPanel() {
     <div class="overlay" onClick={() => (settingsOpen.value = false)}>
       <div class="panel" onClick={(e) => e.stopPropagation()}>
         <div class="panel-title">Settings</div>
+        <div class="setting-row">
+          <span>
+            Sync
+            <small class="setting-sub">Per-calendar detail and pending writes</small>
+          </span>
+          <SyncBadge />
+        </div>
         <div class="setting-row">
           <span>Theme</span>
           <div class="view-switch">
@@ -84,7 +149,8 @@ export function SettingsPanel() {
 }
 
 const SHORTCUTS: [string, string][] = [
-  ['t', 'Go to today'],
+  ['t', 'Select current event'],
+  ['g', 'Go to today'],
   ['j / n', 'Next period'],
   ['k / p', 'Previous period'],
   ['d', 'Day view'],

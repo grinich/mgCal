@@ -116,6 +116,66 @@ export async function deleteEvent(ev: EventRow): Promise<void> {
   kick()
 }
 
+/**
+ * Move an event to another calendar (Google's events.move: same id, new
+ * organizer calendar).
+ *
+ * The row's primary key is [calendarId, id], so the optimistic move is a
+ * relocation: a copy lands on the destination, and the source key keeps a
+ * `pending: 'delete'` tombstone. The tombstone is what stops the source
+ * calendar's next sync from re-adding the event it can still see — without it
+ * the move would show up as a duplicate until it flushed.
+ *
+ * The op is keyed to the SOURCE calendar: that shares the per-event
+ * head-of-line queue with any edit queued before it (those still belong on the
+ * old path), and it keeps the tombstone out of the janitor's hands. Edits
+ * queued after the move are re-pointed once it lands.
+ *
+ * Returns whether a move was queued. Note the event's [calendarId, id] key
+ * changes, so anything holding one (the pane's selection) has to re-point.
+ */
+export async function moveEvent(ev: EventRow, destination: string): Promise<boolean> {
+  if (destination === ev.calendarId) return false
+  const d = await db()
+  const tx = d.transaction(['events', 'outbox'], 'readwrite')
+  const events = tx.objectStore('events')
+  const outbox = tx.objectStore('outbox')
+
+  const existing = await events.get([ev.calendarId, ev.id])
+  if (!existing || existing.pending === 'create') {
+    // An unsynced create has no server-side event to move; let it land first.
+    await tx.done
+    return false
+  }
+  const snapshot = { ...existing }
+
+  // Re-aim a move that hasn't flushed yet instead of queueing a second one:
+  // the first to land would resurrect the row on the calendar we only passed
+  // through, leaving two copies.
+  const queued = (await outbox.getAll()).find((o) => o.opType === 'move' && o.eventId === ev.id)
+  if (queued) {
+    queued.payload = { ...queued.payload, destination }
+    await outbox.put(queued)
+    await events.delete([ev.calendarId, ev.id]) // a stop-over, never real
+  } else {
+    existing.pending = 'delete'
+    await events.put(existing)
+    await outbox.add(
+      newOp({
+        opType: 'move',
+        calendarId: ev.calendarId,
+        eventId: ev.id,
+        payload: { destination },
+        ifMatchEtag: existing.etag || undefined,
+      }),
+    )
+  }
+  await events.put({ ...snapshot, calendarId: destination, pending: 'update' })
+  await tx.done
+  kick()
+  return true
+}
+
 // ---------- recurring scopes ----------
 
 export type RecurringScope = 'this' | 'following' | 'all'

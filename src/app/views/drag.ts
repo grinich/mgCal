@@ -1,11 +1,45 @@
 import { signal } from '@preact/signals'
 import { patchEventScoped } from '../../data/outbox'
 import type { EventRow, GDateTime } from '../../data/types'
-import { askScope, openCreate, selectedKey } from '../state/signals'
+import { askScope, clearSelection, openCreate } from '../state/signals'
 import { addDays, MIN } from '../time'
 import { allDayDragSpan } from './layout'
 
 const SNAP = 15 * MIN
+
+/** A press is a click until it's clearly not: half a second of holding, or
+ * enough travel that it can't be anything else. Until one of those, `drag`
+ * stays null and the grid draws the event exactly as it was — clicking a chip
+ * to select it shouldn't dim it and raise a ghost. */
+const HOLD_MS = 500
+const SLOP_PX = 8
+
+interface Armed {
+  /** Promote to a real drag once the pointer has travelled far enough. */
+  check(e: PointerEvent): void
+  cancel(): void
+}
+
+function armDrag(e: PointerEvent, activate: () => void): Armed {
+  const from = { x: e.clientX, y: e.clientY }
+  let armed = true
+  const fire = () => {
+    if (!armed) return
+    armed = false
+    clearTimeout(timer)
+    activate()
+  }
+  const timer = setTimeout(fire, HOLD_MS)
+  return {
+    check(me) {
+      if (armed && Math.hypot(me.clientX - from.x, me.clientY - from.y) > SLOP_PX) fire()
+    },
+    cancel() {
+      armed = false
+      clearTimeout(timer)
+    },
+  }
+}
 
 export interface EventDrag {
   kind: 'event'
@@ -74,8 +108,7 @@ function toGTime(ms: number, allDay: boolean): GDateTime {
   return { dateTime: new Date(ms).toISOString() }
 }
 
-/** While a drag is live, body.ev-dragging suppresses every chip hover card —
- * otherwise cards pop under the moving cursor and bury the drop target. */
+/** Grabbing cursor for the duration of a live drag. */
 function setDragging(on: boolean): void {
   document.body.classList.toggle('ev-dragging', on)
 }
@@ -111,13 +144,16 @@ export function startEventDrag(e: PointerEvent, ev: EventRow, mode: 'move' | 're
   capturePointer(e)
   const grabOffset = geom.timeAt(e) - ev.startMs
   const duration = ev.endMs - ev.startMs
-  drag.value = { kind: 'event', ev, mode, startMs: ev.startMs, endMs: ev.endMs, moved: false }
-  setDragging(true)
+  const arm = armDrag(e, () => {
+    drag.value = { kind: 'event', ev, mode, startMs: ev.startMs, endMs: ev.endMs, moved: false }
+    setDragging(true)
+  })
 
   const onMove = (me: PointerEvent) => {
-    const t = geom.timeAt(me)
+    arm.check(me)
     const cur = drag.value
     if (cur?.kind !== 'event') return
+    const t = geom.timeAt(me)
     if (mode === 'move') {
       const s = snap(t - grabOffset)
       if (s !== cur.startMs) drag.value = { ...cur, startMs: s, endMs: s + duration, moved: true }
@@ -129,6 +165,7 @@ export function startEventDrag(e: PointerEvent, ev: EventRow, mode: 'move' | 're
   const onUp = () => {
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
+    arm.cancel()
     setDragging(false)
     const cur = drag.value
     drag.value = null
@@ -160,17 +197,20 @@ export function startAllDayEventDrag(
     return Math.max(0, Math.min(days.length - 1, i))
   }
   const anchorIdx = idxAt(e)
-  drag.value = {
-    kind: 'event',
-    ev,
-    mode: edge === 'move' ? 'move' : 'resize',
-    startMs: ev.startMs,
-    endMs: ev.endMs,
-    moved: false,
-  }
-  setDragging(true)
+  const arm = armDrag(e, () => {
+    drag.value = {
+      kind: 'event',
+      ev,
+      mode: edge === 'move' ? 'move' : 'resize',
+      startMs: ev.startMs,
+      endMs: ev.endMs,
+      moved: false,
+    }
+    setDragging(true)
+  })
 
   const onMove = (me: PointerEvent) => {
+    arm.check(me)
     const cur = drag.value
     if (cur?.kind !== 'event') return
     const { startMs, endMs } = allDayDragSpan(ev, edge, idxAt(me) - anchorIdx)
@@ -179,6 +219,7 @@ export function startAllDayEventDrag(
   const onUp = () => {
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
+    arm.cancel()
     setDragging(false)
     const cur = drag.value
     drag.value = null
@@ -211,15 +252,18 @@ export function startAllDayCreateDrag(
     return Math.max(0, Math.min(days.length - 1, i))
   }
   const anchor = idxAt(e)
-  drag.value = { kind: 'create-allday', anchorIdx: anchor, startIdx: anchor, endIdx: anchor, moved: false }
-  setDragging(true)
+  const arm = armDrag(e, () => {
+    drag.value = { kind: 'create-allday', anchorIdx: anchor, startIdx: anchor, endIdx: anchor, moved: false }
+    setDragging(true)
+  })
 
   const onMove = (me: PointerEvent) => {
+    arm.check(me)
     const cur = drag.value
     if (cur?.kind !== 'create-allday') return
     const i = idxAt(me)
-    // A few px of intent also counts as a drag, so a deliberate same-day drag
-    // creates a one-day event while a sloppy click still just deselects.
+    // Horizontal intent within one day also counts, so a deliberate same-day
+    // drag creates a one-day event while a sloppy click still just deselects.
     const moved = cur.moved || i !== cur.anchorIdx || Math.abs(me.clientX - e.clientX) > 4
     const s = Math.min(cur.anchorIdx, i)
     const en = Math.max(cur.anchorIdx, i)
@@ -230,18 +274,21 @@ export function startAllDayCreateDrag(
   const onUp = (ue: PointerEvent) => {
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
+    arm.cancel()
     setDragging(false)
     const cur = drag.value
     drag.value = null
-    if (cur?.kind !== 'create-allday') return
-    if (cur.moved || opts?.clickCreates) {
+    // A press that never became a drag leaves `cur` null: it's a plain click,
+    // which creates a single day on the header and deselects in the strip.
+    const span = cur?.kind === 'create-allday' && cur.moved ? cur : null
+    if (span || opts?.clickCreates) {
       justDragged = true
       setTimeout(() => (justDragged = false), 0)
-      const startMs = days[cur.startIdx]!.getTime()
-      const endMs = addDays(days[cur.endIdx]!, 1).getTime() // exclusive, as all-day ends are
+      const startMs = days[span ? span.startIdx : anchor]!.getTime()
+      const endMs = addDays(days[span ? span.endIdx : anchor]!, 1).getTime() // exclusive, as all-day ends are
       openCreate(startMs, endMs, true, { x: ue.clientX, y: ue.clientY })
     } else {
-      selectedKey.value = null
+      clearSelection()
     }
   }
   window.addEventListener('pointermove', onMove)
@@ -252,13 +299,16 @@ export function startCreateDrag(e: PointerEvent, geom: GridGeom): void {
   if (e.button !== 0) return
   capturePointer(e)
   const anchor = Math.floor(geom.timeAt(e) / SNAP) * SNAP
-  drag.value = { kind: 'create', anchorMs: anchor, startMs: anchor, endMs: anchor + SNAP, moved: false }
-  setDragging(true)
+  const arm = armDrag(e, () => {
+    drag.value = { kind: 'create', anchorMs: anchor, startMs: anchor, endMs: anchor + SNAP, moved: false }
+    setDragging(true)
+  })
 
   const onMove = (me: PointerEvent) => {
-    const t = snap(geom.timeAt(me))
+    arm.check(me)
     const cur = drag.value
     if (cur?.kind !== 'create') return
+    const t = snap(geom.timeAt(me))
     const s = Math.min(cur.anchorMs, t)
     const end = Math.max(cur.anchorMs + SNAP, t)
     if (s !== cur.startMs || end !== cur.endMs) drag.value = { ...cur, startMs: s, endMs: end, moved: true }
@@ -266,16 +316,21 @@ export function startCreateDrag(e: PointerEvent, geom: GridGeom): void {
   const onUp = (ue: PointerEvent) => {
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
+    arm.cancel()
     setDragging(false)
     const cur = drag.value
     drag.value = null
-    if (cur?.kind !== 'create') return
+    // A press that never became a drag is a plain click: deselect.
+    if (cur?.kind !== 'create') {
+      clearSelection()
+      return
+    }
     if (cur.moved) {
       justDragged = true
       setTimeout(() => (justDragged = false), 0)
       openCreate(cur.startMs, cur.endMs, false, { x: ue.clientX, y: ue.clientY })
     } else {
-      selectedKey.value = null
+      clearSelection()
     }
   }
   window.addEventListener('pointermove', onMove)

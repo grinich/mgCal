@@ -283,11 +283,17 @@ function MiniMonth({ valueMs, onPick }: { valueMs: number; onPick: (d: Date) => 
 
 // ---------- editor ----------
 
+/** Modal half of the editor: the create flows only. Editing an existing event
+ * happens inline in the detail pane, which renders EventEditForm itself. */
 export function EventEditor() {
   const st = editor.value
-  if (!st) return null
+  if (!st || st.mode === 'edit') return null
   if (st.quickAt) return <QuickCreate key="quick" />
-  return <EditorForm key={st.original ? `${st.original.calendarId}|${st.original.id}` : 'create'} />
+  return (
+    <div class="overlay" onClick={() => (editor.value = null)}>
+      <EventEditForm key="create" cls="panel editor editor-lg" />
+    </div>
+  )
 }
 
 function fmtDay(ms: number): string {
@@ -373,7 +379,9 @@ function QuickCreate() {
   )
 }
 
-function EditorForm() {
+/** The form itself, drawn wherever the caller puts it: centered in a modal
+ * for creates, filling the detail pane for edits. */
+export function EventEditForm({ cls }: { cls: string }) {
   const st = editor.value!
   const [summary, setSummary] = useState(st.summary)
   const [allDay, setAllDay] = useState(st.allDay)
@@ -492,176 +500,174 @@ function EditorForm() {
   const cals = st.mode === 'create' ? writableCalendars() : calendars.value
 
   return (
-    <div class="overlay" onClick={close}>
-      <form
-        class="panel editor editor-lg"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={save}
+    <form
+      class={cls}
+      onClick={(e) => e.stopPropagation()}
+      onSubmit={save}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation()
+          close()
+        } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault()
+          void save()
+        }
+      }}
+    >
+      <input
+        ref={titleRef}
+        class="editor-title"
+        placeholder="Event title"
+        value={summary}
+        onInput={(e) => setSummary(e.currentTarget.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.stopPropagation()
-            close()
-          } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          // Enter from the title jumps to the start date (Enter saves later).
+          if (e.key === 'Enter') {
             e.preventDefault()
-            void save()
+            ;(e.currentTarget.form?.querySelector('.date-input') as HTMLElement | null)?.focus()
           }
         }}
-      >
-        <input
-          ref={titleRef}
-          class="editor-title"
-          placeholder="Event title"
-          value={summary}
-          onInput={(e) => setSummary(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            // Enter from the title jumps to the start date (Enter saves later).
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              ;(e.currentTarget.form?.querySelector('.date-input') as HTMLElement | null)?.focus()
-            }
-          }}
-        />
+      />
 
-        <div class="when-grid">
-          <div class="when-col">
-            <div class="when-label">Starts</div>
-            <div class="when-fields">
-              <DateField ms={startMs} label="Start date" onCommit={(d) => moveStart(withDate(startMs, d))} />
-              {!allDay && (
-                <TimeField ms={startMs} label="Start time" onCommit={(m) => moveStart(withMinutes(startMs, m))} />
-              )}
-            </div>
-          </div>
-          <div class="when-col">
-            <div class="when-label">Ends</div>
-            <div class="when-fields">
-              <DateField ms={endMs} label="End date" onCommit={(d) => moveEnd(withDate(endMs, d))} />
-              {!allDay && (
-                <TimeField ms={endMs} label="End time" onCommit={(m) => moveEnd(withMinutes(endMs, m))} />
-              )}
-            </div>
+      <div class="when-grid">
+        <div class="when-col">
+          <div class="when-label">Starts</div>
+          <div class="when-fields">
+            <DateField ms={startMs} label="Start date" onCommit={(d) => moveStart(withDate(startMs, d))} />
+            {!allDay && (
+              <TimeField ms={startMs} label="Start time" onCommit={(m) => moveStart(withMinutes(startMs, m))} />
+            )}
           </div>
         </div>
+        <div class="when-col">
+          <div class="when-label">Ends</div>
+          <div class="when-fields">
+            <DateField ms={endMs} label="End date" onCommit={(d) => moveEnd(withDate(endMs, d))} />
+            {!allDay && (
+              <TimeField ms={endMs} label="End time" onCommit={(m) => moveEnd(withMinutes(endMs, m))} />
+            )}
+          </div>
+        </div>
+      </div>
 
-        <div class="editor-row">
-          <label class="editor-check">
-            <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.currentTarget.checked)} />
-            All day
-          </label>
-          <select
-            value={calendarId}
-            disabled={st.mode === 'edit'}
-            onChange={(e) => setCalendarId(e.currentTarget.value)}
-          >
-            {cals.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.summary}
+      <div class="editor-row">
+        <label class="editor-check">
+          <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.currentTarget.checked)} />
+          All day
+        </label>
+        <select
+          value={calendarId}
+          disabled={st.mode === 'edit'}
+          onChange={(e) => setCalendarId(e.currentTarget.value)}
+        >
+          {cals.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.summary}
+            </option>
+          ))}
+        </select>
+        {st.mode === 'create' && (
+          <select value={repeat} onChange={(e) => setRepeat(e.currentTarget.value as RecurrencePreset)}>
+            {PRESETS.map((p) => (
+              <option key={p} value={p}>
+                {presetLabel(p, new Date(startMs))}
               </option>
             ))}
           </select>
-          {st.mode === 'create' && (
-            <select value={repeat} onChange={(e) => setRepeat(e.currentTarget.value as RecurrencePreset)}>
-              {PRESETS.map((p) => (
-                <option key={p} value={p}>
-                  {presetLabel(p, new Date(startMs))}
-                </option>
-              ))}
-            </select>
-          )}
-          {st.mode === 'edit' && st.original?.recurringEventId && <span class="muted">↻ Recurring</span>}
-        </div>
+        )}
+        {st.mode === 'edit' && st.original?.recurringEventId && <span class="muted">↻ Recurring</span>}
+      </div>
 
-        <div class="guest-box">
-          {guests.map((g) => (
-            <span key={g} class="guest-chip">
-              {g}
-              <button type="button" class="guest-x" onClick={() => setGuests(guests.filter((x) => x !== g))}>
-                ✕
-              </button>
-            </span>
-          ))}
-          <input
-            class="guest-input"
-            placeholder={guests.length ? 'Add guest' : 'Add guests'}
-            list="known-emails"
-            value={guestInput}
-            onInput={(e) => setGuestInput(e.currentTarget.value)}
-            onChange={(e) => addGuest(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && guestInput.trim()) {
-                e.preventDefault()
-                addGuest(guestInput)
-              } else if (e.key === 'Backspace' && !guestInput && guests.length) {
-                setGuests(guests.slice(0, -1))
-              }
-            }}
-          />
-          <datalist id="known-emails">
-            {knownEmails
-              .filter((k) => !guests.includes(k))
-              .slice(0, 50)
-              .map((k) => (
-                <option key={k} value={k} />
-              ))}
-          </datalist>
-        </div>
+      <div class="guest-box">
+        {guests.map((g) => (
+          <span key={g} class="guest-chip">
+            {g}
+            <button type="button" class="guest-x" onClick={() => setGuests(guests.filter((x) => x !== g))}>
+              ✕
+            </button>
+          </span>
+        ))}
+        <input
+          class="guest-input"
+          placeholder={guests.length ? 'Add guest' : 'Add guests'}
+          list="known-emails"
+          value={guestInput}
+          onInput={(e) => setGuestInput(e.currentTarget.value)}
+          onChange={(e) => addGuest(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && guestInput.trim()) {
+              e.preventDefault()
+              addGuest(guestInput)
+            } else if (e.key === 'Backspace' && !guestInput && guests.length) {
+              setGuests(guests.slice(0, -1))
+            }
+          }}
+        />
+        <datalist id="known-emails">
+          {knownEmails
+            .filter((k) => !guests.includes(k))
+            .slice(0, 50)
+            .map((k) => (
+              <option key={k} value={k} />
+            ))}
+        </datalist>
+      </div>
 
-        {/* Event categories: the color palette with the user's category names. */}
-        <div class="cat-row">
+      {/* Event categories: the color palette with the user's category names. */}
+      <div class="cat-row">
+        <button
+          type="button"
+          tabIndex={-1}
+          class={'cat-pill' + (colorId === '' ? ' sel' : '')}
+          style={{ '--dot': calendarById.value.get(calendarId)?.backgroundColor ?? 'var(--accent)' }}
+          onClick={() => setColorId('')}
+        >
+          <span class="cat-pill-dot" />
+          Calendar color
+        </button>
+        {Object.values(EVENT_COLORS).map((c) => (
           <button
+            key={c.id}
             type="button"
             tabIndex={-1}
-            class={'cat-pill' + (colorId === '' ? ' sel' : '')}
-            style={{ '--dot': calendarById.value.get(calendarId)?.backgroundColor ?? 'var(--accent)' }}
-            onClick={() => setColorId('')}
+            class={'cat-pill' + (colorId === c.id ? ' sel' : '')}
+            style={{ '--dot': c.hex }}
+            onClick={() => setColorId(c.id)}
           >
             <span class="cat-pill-dot" />
-            Calendar color
+            {c.label ?? c.name}
           </button>
-          {Object.values(EVENT_COLORS).map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              tabIndex={-1}
-              class={'cat-pill' + (colorId === c.id ? ' sel' : '')}
-              style={{ '--dot': c.hex }}
-              onClick={() => setColorId(c.id)}
-            >
-              <span class="cat-pill-dot" />
-              {c.label ?? c.name}
-            </button>
-          ))}
-        </div>
+        ))}
+      </div>
 
-        <input
-          class="editor-field"
-          placeholder="Location"
-          value={location}
-          onInput={(e) => setLocation(e.currentTarget.value)}
-        />
-        <textarea
-          class="editor-field"
-          placeholder="Description"
-          rows={3}
-          value={description}
-          onInput={(e) => setDescription(e.currentTarget.value)}
-        />
-        <div class="editor-actions">
-          {st.mode === 'edit' && (
-            <button type="button" class="btn danger" onClick={() => void del()}>
-              Delete
-            </button>
-          )}
-          <div class="spacer" />
-          <span class="muted editor-hint">⌘↵ to save</span>
-          <button type="button" class="btn" onClick={close}>
-            Cancel
+      <input
+        class="editor-field"
+        placeholder="Location"
+        value={location}
+        onInput={(e) => setLocation(e.currentTarget.value)}
+      />
+      <textarea
+        class="editor-field"
+        placeholder="Description"
+        rows={3}
+        value={description}
+        onInput={(e) => setDescription(e.currentTarget.value)}
+      />
+      <div class="editor-actions">
+        {st.mode === 'edit' && (
+          <button type="button" class="btn danger" onClick={() => void del()}>
+            Delete
           </button>
-          <button type="submit" class="btn accent" data-save>
-            Save
-          </button>
-        </div>
-      </form>
-    </div>
+        )}
+        <div class="spacer" />
+        <span class="muted editor-hint">⌘↵ to save</span>
+        <button type="button" class="btn" onClick={close}>
+          Cancel
+        </button>
+        <button type="submit" class="btn accent" data-save>
+          Save
+        </button>
+      </div>
+    </form>
   )
 }

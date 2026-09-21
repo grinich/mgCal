@@ -47,6 +47,9 @@
     overflow: hidden;
   }
   #app { height: 100%; display: flex; flex-direction: column; }
+  /* claimFocus() parks focus here on a new tab; it's a scroll container, not
+     a control, so it should never draw a ring. */
+  #app:focus { outline: none; }
 
   /* --- Static skeleton (replaced by hydration, layout-identical) --- */
   .sk-header {

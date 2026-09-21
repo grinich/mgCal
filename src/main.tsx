@@ -6,8 +6,15 @@ import { initApp } from './app/state/signals'
 import { initKeyboard } from './app/keyboard'
 import { initTheme } from './app/theme'
 import { initFavicon } from './app/favicon'
+import { claimFocus } from './app/focus'
 
 async function boot() {
+  // Before the awaits below: Chrome focuses the omnibox as the tab is created,
+  // so the sooner the page takes focus back the sooner j/k work. #app is in
+  // the static HTML, so it's there to focus already.
+  const root = document.getElementById('app')!
+  claimFocus(root)
+
   // Dev-only: chrome.* shim + demo data so the page runs on localhost.
   // Dead-code-eliminated from the extension build.
   if (import.meta.env.DEV) {
@@ -24,7 +31,6 @@ async function boot() {
 
   // Swap the static skeleton for the live app in a single frame — the layouts
   // are identical, so the first hydrated paint lands without a visible shift.
-  const root = document.getElementById('app')!
   root.textContent = ''
   render(<App />, root)
 }

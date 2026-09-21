@@ -1,9 +1,7 @@
-import { useRef, useState } from 'preact/hooks'
-import { patchEventScoped, rsvpEvent } from '../../data/outbox'
 import type { EventRow } from '../../data/types'
-import { chipTextColor, EVENT_COLORS, eventColorHex } from '../colors'
+import { chipTextColor, eventColorHex } from '../colors'
 import { cleanLocation, locationHref } from '../location'
-import { askScope, calendarById, openEdit, selectedAnchor, selectedKey } from '../state/signals'
+import { calendarById, clearSelection, openEdit, selectedKey, setSelected } from '../state/signals'
 import { fmtTime } from '../time'
 import { drag, startEventDrag, wasDragged, type GridGeom } from './drag'
 
@@ -21,94 +19,16 @@ export function isDeclined(e: EventRow): boolean {
   return e.attendees?.some((a) => a.self && a.responseStatus === 'declined') ?? false
 }
 
-export function toggleSelect(e: EventRow, el?: HTMLElement): void {
+export function toggleSelect(e: EventRow): void {
   if (wasDragged()) return
   const k = eventKey(e)
-  if (selectedKey.value === k) {
-    selectedKey.value = null
-    selectedAnchor.value = null
-  } else {
-    selectedKey.value = k
-    if (el) {
-      const r = el.getBoundingClientRect()
-      selectedAnchor.value = { x: r.x, y: r.y, w: r.width, h: r.height }
-    } else {
-      selectedAnchor.value = null
-    }
-  }
+  if (selectedKey.value === k) clearSelection()
+  else setSelected(k)
 }
 
 function canEdit(e: EventRow): boolean {
   // Server enforces real permissions; this just avoids futile drags on read-only calendars.
   return true
-}
-
-// Menu box metrics for placement math: fixed width, and the tallest the menu
-// gets (12 static items capped by the CSS max-height).
-const CAT_MENU_W = 200
-const CAT_MENU_H = 280
-
-/** Color + category pill in the hover card; click to reassign the colorId. */
-function CategoryPicker({ ev }: { ev: EventRow }) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ left: 0, top: 0 })
-  const btnRef = useRef<HTMLButtonElement>(null)
-  const current = ev.colorId ? EVENT_COLORS[ev.colorId] : undefined
-  const calColor = calendarById.value.get(ev.calendarId)?.backgroundColor ?? 'var(--accent)'
-
-  // Fixed-position the menu off the button so it can escape the chip, and
-  // clamp to the viewport: flip above when the bottom would clip, keep the
-  // right edge on screen.
-  const toggle = () => {
-    if (open) {
-      setOpen(false)
-      return
-    }
-    const r = btnRef.current!.getBoundingClientRect()
-    const left = Math.max(8, Math.min(r.right - CAT_MENU_W, window.innerWidth - CAT_MENU_W - 8))
-    let top = r.bottom + 4
-    if (top + CAT_MENU_H > window.innerHeight - 8) top = Math.max(8, r.top - 4 - CAT_MENU_H)
-    setPos({ left, top })
-    setOpen(true)
-  }
-
-  const set = (colorId: string) => {
-    setOpen(false)
-    if ((ev.colorId ?? '') === colorId) return
-    void askScope(ev, 'edit').then((scope) => {
-      if (!scope) return
-      // Empty = revert to calendar color (null clears server-side).
-      void patchEventScoped(ev, { colorId: (colorId || null) as unknown as string }, scope)
-    })
-  }
-
-  return (
-    <div class="cat-pick" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-      <button ref={btnRef} class="cat-btn" title="Change category" onClick={toggle}>
-        <span class="cat-dot" style={{ background: current?.hex ?? calColor }} />
-        <span class="cat-label">{current ? (current.label ?? current.name) : 'Category'}</span>
-        <span class="cat-chev">▾</span>
-      </button>
-      {open && (
-        <div class="cat-menu" style={{ left: `${pos.left}px`, top: `${pos.top}px` }}>
-          <button class={'cat-item' + (!ev.colorId ? ' active' : '')} onClick={() => set('')}>
-            <span class="cat-dot" style={{ background: calColor }} />
-            Calendar default
-          </button>
-          {Object.values(EVENT_COLORS).map((c) => (
-            <button
-              key={c.id}
-              class={'cat-item' + (ev.colorId === c.id ? ' active' : '')}
-              onClick={() => set(c.id)}
-            >
-              <span class="cat-dot" style={{ background: c.hex }} />
-              {c.label ?? c.name}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }
 
 function LocationLink({ loc, cls }: { loc: string; cls: string }) {
@@ -185,7 +105,7 @@ export function EventChip({
       onPointerDown={(e) => geom && canEdit(ev) && startEventDrag(e, ev, 'move', geom)}
       onClick={(e) => {
         e.stopPropagation()
-        toggleSelect(ev, e.currentTarget as HTMLElement)
+        toggleSelect(ev)
       }}
       onDblClick={(e) => {
         e.stopPropagation()
@@ -195,39 +115,6 @@ export function EventChip({
       <div class="chip-title">{ev.summary || '(no title)'}</div>
       <div class="chip-time">{fmtTime(ev.startMs)}</div>
       {ev.location && height >= 50 && <LocationLink loc={ev.location} cls="chip-loc" />}
-      {/* Hover card: expands below the title "tab", so neighboring tabs on the
-          same row stay reachable as the cursor travels across. */}
-      <div class="chip-card">
-        <div class="chip-card-row1">
-          <div class="chip-card-title">{ev.summary || '(no title)'}</div>
-          <CategoryPicker ev={ev} />
-        </div>
-        <div class="chip-time">
-          {fmtTime(ev.startMs)} – {fmtTime(ev.endMs)}
-        </div>
-        {ev.location && <LocationLink loc={ev.location} cls="chip-card-loc" />}
-        {self && (
-          <div
-            class="chip-card-rsvp"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <span class="chip-rsvp-label">Going?</span>
-            <button
-              class={'chip-rsvp-btn' + (self.responseStatus === 'accepted' ? ' active' : '')}
-              onClick={() => void rsvpEvent(ev, 'accepted')}
-            >
-              Yes
-            </button>
-            <button
-              class={'chip-rsvp-btn' + (declined ? ' active' : '')}
-              onClick={() => void rsvpEvent(ev, 'declined')}
-            >
-              No
-            </button>
-          </div>
-        )}
-      </div>
       {geom && canEdit(ev) && (
         <div class="resize-handle" onPointerDown={(e) => startEventDrag(e, ev, 'resize', geom)} />
       )}

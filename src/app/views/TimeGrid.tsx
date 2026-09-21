@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from 'preact/hooks'
 import type { EventRow } from '../../data/types'
-import { calendarById, editor, nowMs, openEdit, overflowList, selectedKey, writableCalendars } from '../state/signals'
+import { calendarById, editor, nowMs, openEdit, selectedKey, writableCalendars } from '../state/signals'
 import { addDays, DOW, defaultScrollTop, fmtTime, fmtTimeShort, hourH, isSameDay, setHourH, wallHours } from '../time'
 import { inAllDayRow, layoutDay, layoutLanes, splitAllDay } from './layout'
 import { chipTextColor } from '../colors'
@@ -162,7 +162,7 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
                 }
                 onClick={(e) => {
                   e.stopPropagation()
-                  toggleSelect(l.ev, e.currentTarget as HTMLElement)
+                  toggleSelect(l.ev)
                 }}
                 onDblClick={(e) => {
                   e.stopPropagation()
@@ -223,7 +223,7 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
             ))}
           </div>
           {days.map((d) => (
-            <DayColumn key={d.getTime()} day={d} events={timed} geom={geom} maxCols={days.length === 1 ? 6 : 3} />
+            <DayColumn key={d.getTime()} day={d} events={timed} geom={geom} />
           ))}
           <div class="hour-lines" />
         </div>
@@ -232,32 +232,13 @@ export function TimeGrid({ days, events }: { days: Date[]; events: EventRow[] })
   )
 }
 
-/** Contended visible columns go to my own calendars first; shared-calendar
- * events and things I've declined are first into the +N overflow. */
-function priorityRank(ev: EventRow): number {
-  const cal = calendarById.value.get(ev.calendarId)
-  let r = cal?.accessRole === 'owner' ? 0 : 1
-  if (isDeclined(ev)) r += 2
-  return r
-}
-
-function DayColumn({
-  day,
-  events,
-  geom,
-  maxCols,
-}: {
-  day: Date
-  events: EventRow[]
-  geom: GridGeom
-  maxCols: number
-}) {
+function DayColumn({ day, events, geom }: { day: Date; events: EventRow[]; geom: GridGeom }) {
   const dayStartMs = day.getTime()
   const dayEndMs = addDays(day, 1).getTime() // real day end — DST days aren't 24h
   const now = nowMs.value
   const isToday = isSameDay(day, new Date(now))
   const dayEvents = events.filter((e) => e.startMs < dayEndMs && e.endMs > dayStartMs)
-  const { chips, overflows } = layoutDay(dayEvents, dayStartMs, dayEndMs, maxCols, priorityRank)
+  const chips = layoutDay(dayEvents, dayStartMs, dayEndMs)
 
   const d = drag.value
   const ed = editor.value
@@ -299,21 +280,6 @@ function DayColumn({
           z={p.z}
           geom={geom}
         />
-      ))}
-      {overflows.map((o) => (
-        <button
-          key={`more-${o.top}`}
-          class="chip-more"
-          style={{ top: `${o.top}px`, height: `${o.height}px` }}
-          title={`${o.events.length} more events`}
-          onClick={(e) => {
-            e.stopPropagation()
-            const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-            overflowList.value = { events: o.events, anchor: { x: r.x, y: r.y, w: r.width, h: r.height } }
-          }}
-        >
-          +{o.events.length}
-        </button>
       ))}
       {ghost && (
         <div

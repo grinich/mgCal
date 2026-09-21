@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type { EventRow } from '../../data/types'
-import { calendarById, searchOpen, selectedKey, setAnchor } from '../state/signals'
+import { calendarById, searchOpen, setAnchor, setSelected } from '../state/signals'
 import { fmtTime } from '../time'
 import { eventKey } from '../views/EventChip'
 import { invalidateSearchIndex, searchEvents } from './searchIndex'
@@ -38,7 +38,7 @@ function SearchBox() {
 
   function openResult(ev: EventRow): void {
     setAnchor(new Date(ev.startMs))
-    selectedKey.value = eventKey(ev)
+    setSelected(eventKey(ev))
     close()
   }
 

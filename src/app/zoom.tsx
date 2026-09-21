@@ -33,14 +33,31 @@ export function zoomOpenHref(url: string): string {
   return `zoommtg://${m[1]}/join?action=join&confno=${m[2]}${pwd ? `&pwd=${encodeURIComponent(pwd)}` : ''}`
 }
 
+/** A real meeting rather than a block you put on your own calendar: there's
+ * something to join, or someone else on the invite. Rooms don't count as
+ * someone else. */
+function isMeeting(e: EventRow): boolean {
+  if (zoomLink(e) || e.hangoutLink) return true
+  return (e.attendees ?? []).some((a) => !a.self && !a.email?.endsWith('resource.calendar.google.com'))
+}
+
 /** The meeting happening right now (drives the header pill and ⌘↵ join).
- * Most recently started wins when meetings overlap — it's the one you're in.
- * Skips all-day events and meetings you declined. */
+ * Skips all-day events and meetings you declined.
+ *
+ * A real meeting outranks a personal block, because blocks like [transit] or
+ * [hold] routinely sit on top of the thing you're actually in — and they're
+ * never what you want to join. Among equals the most recently started wins
+ * (it's the one you just walked into), then the shorter of the two. */
 export function currentEvent(): EventRow | undefined {
   const now = nowMs.value
   return visibleEvents.value
     .filter((e) => !e.allDay && e.startMs <= now && now < e.endMs && !isDeclined(e))
-    .sort((a, b) => b.startMs - a.startMs)[0]
+    .sort(
+      (a, b) =>
+        Number(isMeeting(b)) - Number(isMeeting(a)) ||
+        b.startMs - a.startMs ||
+        a.endMs - a.startMs - (b.endMs - b.startMs),
+    )[0]
 }
 
 /** Programmatic join (keyboard shortcut): same semantics as ZoomJoinLink. */

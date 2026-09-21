@@ -7,16 +7,17 @@ import {
   navigate,
   openCreate,
   openEdit,
-  overflowList,
   scopeDialog,
   searchOpen,
   selectedEvent,
   selectedKey,
+  setSelected,
   settingsOpen,
   setView,
   toggleSidebar,
 } from './state/signals'
 import { deleteEventScoped } from '../data/outbox'
+import { eventKey } from './views/EventChip'
 import { currentEvent, joinZoom, zoomLink } from './zoom'
 
 type Handler = () => void
@@ -28,7 +29,15 @@ export function bindKey(key: string, handler: Handler): void {
 }
 
 export function initKeyboard(): void {
-  bindKey('t', goToday)
+  // Whatever's happening right now, in the pane. With nothing running (or the
+  // view parked on another week, where there's no "now" to find) it falls back
+  // to today — the same key still gets you home.
+  bindKey('t', () => {
+    const cur = currentEvent()
+    if (cur) setSelected(eventKey(cur))
+    else goToday()
+  })
+  bindKey('g', goToday)
   bindKey('j', () => navigate(1))
   bindKey('n', () => navigate(1))
   bindKey('k', () => navigate(-1))
@@ -57,7 +66,6 @@ export function initKeyboard(): void {
   bindKey('Delete', deleteSelected)
   bindKey('Escape', () => {
     if (scopeDialog.value) scopeDialog.value.resolve(null)
-    else if (overflowList.value) overflowList.value = null
     else if (editor.value) editor.value = null
     else if (searchOpen.value) searchOpen.value = false
     else if (helpOpen.value) helpOpen.value = false
