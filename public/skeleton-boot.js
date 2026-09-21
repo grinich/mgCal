@@ -4,13 +4,19 @@
 ;(function () {
   var now = new Date()
   var view = localStorage.getItem('view') || 'week'
-  var anchor = now // new tabs always open on today, matching the live app
+  var ws = localStorage.getItem('weekStart') === '1' ? 1 : 0
+  // Must mirror initialAnchor() in src/app/state/signals.ts: on a weekend that
+  // trails the week on screen, week view opens on the week ahead. Painting
+  // today's week here would flash the wrong dates and scroll position, then
+  // jump a week on hydration.
+  var wd = now.getDay()
+  var anchor = new Date(now)
+  if (view === 'week' && (wd === 6 || (wd === 0 && ws === 1))) anchor.setDate(anchor.getDate() + 7)
   if (view === 'month') {
     // Month view has a different shape; keep just the header, no week skeleton.
     document.getElementById('sk-days').style.display = 'none'
     document.getElementById('sk-grid').style.display = 'none'
   }
-  var ws = localStorage.getItem('weekStart') === '1' ? 1 : 0
   var start = new Date(anchor)
   start.setHours(0, 0, 0, 0)
   if (view !== 'day') start.setDate(start.getDate() - ((start.getDay() - ws + 7) % 7))
