@@ -8,9 +8,11 @@ import {
   navigate,
   settingsOpen,
   setView,
+  titleDate,
   toggleCalendarHidden,
   toggleSidebar,
   view,
+  weekStart,
 } from './state/signals'
 import { chipTextColor } from './colors'
 import { fmtMonthYear, fmtTime } from './time'
@@ -97,7 +99,7 @@ export function Header() {
           <path d="M2 4h12M2 8h12M2 12h12" stroke-linecap="round" />
         </svg>
       </button>
-      <span class="title">{fmtMonthYear(anchor.value)}</span>
+      <span class="title">{fmtMonthYear(titleDate(view.value, anchor.value, weekStart.value))}</span>
       <button class="btn" title="Today (g)" onClick={goToday}>
         Today
       </button>

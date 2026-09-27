@@ -33,6 +33,14 @@ export function initialAnchor(now: Date, v: View, weekStartsOn: 0 | 1): Date {
   return v === 'week' && trailingWeekend ? addDays(now, 7) : now
 }
 
+/** The date whose month and year the header shows. In week view that's the
+ * first day on screen rather than the anchor: paging with j/k leaves the
+ * anchor on an arbitrary weekday, and a week that straddles a month boundary
+ * is named for where it starts — Sep 28 to Oct 4 is "September". */
+export function titleDate(v: View, a: Date, weekStartsOn: 0 | 1): Date {
+  return v === 'week' ? startOfWeek(a, weekStartsOn) : a
+}
+
 // Every new tab opens on today (weekends excepted, see above); navigation only
 // lasts for the tab's lifetime.
 export const anchor = signal<Date>(initialAnchor(new Date(), view.value, weekStart.value))

@@ -46,7 +46,11 @@
     el.appendChild(dom)
     days.appendChild(el)
   }
-  document.getElementById('sk-title').textContent = anchor.toLocaleDateString(undefined, {
+  // Mirrors titleDate() in src/app/state/signals.ts: a week is named for its
+  // first day on screen, so a week straddling a month boundary doesn't flash
+  // one month here and settle on another after hydration.
+  var titleFor = view === 'month' ? anchor : start
+  document.getElementById('sk-title').textContent = titleFor.toLocaleDateString(undefined, {
     month: 'long',
     year: 'numeric',
   })
